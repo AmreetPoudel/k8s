@@ -338,7 +338,7 @@ You now understand:
 - ✅ What breaks when each cert type expires
 - ✅ How ServiceAccount tokens differ from cert-based auth
 
-**Next**: [Doc 04 - etcd Deep Dive →](./04-etcd-deep-dive.md)  
+**Next**: [Doc 04 - etcd Deep Dive →](./04_etcd_deepdive.md)  
 Understanding etcd is understanding your cluster's brain. You'll learn Raft consensus, why quorum matters, how to back up etcd, and how to recover from etcd disasters.
 
 ---

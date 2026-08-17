@@ -422,7 +422,7 @@ You now know:
 - ✅ How keepalived VIP works for HA masters
 - ✅ The reconciliation loop mental model
 
-**Next**: [Doc 02 - Node Preparation →](./02-node-preparation.md)  
+**Next**: [Doc 02 - Node Preparation →](./02_node_preparation.md)  
 You'll prepare all 6 Ubuntu 24.04 servers with the exact settings RKE2 needs to not silently fail.
 
 ---

@@ -44,20 +44,20 @@ Read these **in order**. Each doc builds on the previous one.
 
 | # | Document | What You Learn |
 |---|----------|----------------|
-| [01](./01-kubernetes-and-rke2-theory.md) | Kubernetes & RKE2 Theory | What k8s is, control plane anatomy, how RKE2 differs from kubeadm/k3s/RKE1 |
-| [02](./02-node-preparation.md) | Node Preparation | OS hardening, kernel parameters, firewall rules, why each setting exists |
-| [03](./03-pki-and-certificates.md) | PKI & Certificates | How k8s TLS works, what breaks if certs expire, SANs, CA chain |
-| [04](./04-etcd-deep-dive.md) | etcd Deep Dive | Raft consensus, quorum math, backup/restore, etcdctl commands |
-| [05](./05-cni-networking.md) | CNI & Networking | Canal vs Cilium, overlay networks, iptables/eBPF, pod-to-pod routing |
-| [06](./06-master-cluster-bootstrap.md) | Bootstrap Masters | Install RKE2 on master-1, join master-2 and master-3, keepalived VIP |
-| [07](./07-worker-nodes.md) | Join Workers | Install RKE2 agent, join cluster, taint masters, verify scheduling |
-| [08](./08-rbac-and-security.md) | RBAC & Security | Roles, ClusterRoles, ServiceAccounts, CIS benchmark, audit logs |
-| [09](./09-storage-longhorn.md) | Storage & Longhorn | CSI, PV/PVC/StorageClass, Longhorn install, distributed storage |
-| [10](./10-ingress-and-lb.md) | Ingress & LoadBalancer | NGINX ingress, MetalLB, how traffic reaches your pods |
-| [11](./11-helm-and-workloads.md) | Helm & Workloads | Deploy apps, Helm charts, operators, namespace strategy |
-| [12](./12-monitoring.md) | Monitoring Stack | Prometheus, Grafana, alerting, what to monitor in RKE2 |
-| [13](./13-troubleshooting.md) | Troubleshooting | crictl, journalctl, etcd debugging, CNI issues, cert failures |
-| [14](./14-interview-prep.md) | Interview Prep | 60+ questions with deep answers, mental models, war stories |
+| [01](./01_kubernetes_and_rke2_theory.md) | Kubernetes & RKE2 Theory | What k8s is, control plane anatomy, how RKE2 differs from kubeadm/k3s/RKE1 |
+| [02](./02_node_preparation.md) | Node Preparation | OS hardening, kernel parameters, firewall rules, why each setting exists |
+| [03](./03_pki_and_certs.md) | PKI & Certificates | How k8s TLS works, what breaks if certs expire, SANs, CA chain |
+| [04](./04_etcd_deepdive.md) | etcd Deep Dive | Raft consensus, quorum math, backup/restore, etcdctl commands |
+| [05](./05_cni_networking.md) | CNI & Networking | Canal vs Cilium, overlay networks, iptables/eBPF, pod-to-pod routing |
+| [06](./06_master_cluster_bootstrap.md) | Bootstrap Masters | Install RKE2 on master-1, join master-2 and master-3, keepalived VIP |
+| [07](./07_worker_nodes.md) | Join Workers | Install RKE2 agent, join cluster, taint masters, verify scheduling |
+| [08](./08_rbac_and_security.md) | RBAC & Security | Roles, ClusterRoles, ServiceAccounts, CIS benchmark, audit logs |
+| [09](./09_storage_longhorn.md) | Storage & Longhorn | CSI, PV/PVC/StorageClass, Longhorn install, distributed storage |
+| [10](./10_ingress_and_lb.md) | Ingress & LoadBalancer | NGINX ingress, MetalLB, how traffic reaches your pods |
+| [11](./11_helm_and_workloads.md) | Helm & Workloads | Deploy apps, Helm charts, operators, namespace strategy |
+| [12](./12_monitoring.md) | Monitoring Stack | Prometheus, Grafana, alerting, what to monitor in RKE2 |
+| [13](./13_troubleshooting.md) | Troubleshooting | crictl, journalctl, etcd debugging, CNI issues, cert failures |
+| [14](./14_interview_prep.md) | Interview Prep | 60+ questions with deep answers, mental models, war stories |
 
 ---
 
@@ -90,4 +90,4 @@ Read these **in order**. Each doc builds on the previous one.
 
 ---
 
-*Start with [Doc 01 →](./01-kubernetes-and-rke2-theory.md)*
+*Start with [Doc 01 →](./01_kubernetes_and_rke2_theory.md)*

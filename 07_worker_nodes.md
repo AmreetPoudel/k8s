@@ -346,7 +346,7 @@ You now have a **full 6-node RKE2 cluster**:
 - ✅ Canal CNI — pod-to-pod and cross-node networking verified
 - ✅ CoreDNS — DNS resolution verified
 
-**Next**: [Doc 08 - RBAC & Security →](./08-rbac-and-security.md)  
+**Next**: [Doc 08 - RBAC & Security →](./08_rbac_and_security.md)  
 How to control who can do what in your cluster. ServiceAccounts, Roles, ClusterRoles, audit logs, and CIS benchmark hardening.
 
 ---

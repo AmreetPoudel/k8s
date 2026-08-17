@@ -431,7 +431,7 @@ You now understand:
 - ✅ Full backup and restore procedures
 - ✅ Compaction and defragmentation
 
-**Next**: [Doc 05 - CNI & Networking →](./05-cni-networking.md)  
+**Next**: [Doc 05 - CNI & Networking →](./05_cni_networking.md)  
 How do pods get IPs? How does traffic flow between pods on different nodes? What is VXLAN? How do Services work at the packet level?
 
 ---

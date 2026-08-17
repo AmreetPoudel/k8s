@@ -389,7 +389,7 @@ You now understand:
 - ✅ DaemonSets for node-level workloads
 - ✅ Namespace strategy with ResourceQuota and LimitRange
 
-**Next**: [Doc 12 - Monitoring →](./12-monitoring.md)  
+**Next**: [Doc 12 - Monitoring →](./12_monitoring.md)  
 Prometheus + Grafana stack, what to monitor in RKE2, alerting, and reading metrics.
 
 ---

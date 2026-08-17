@@ -350,7 +350,7 @@ You now understand:
 - ✅ MetalLB for bare-metal LoadBalancer Services (L2 ARP mode)
 - ✅ Key Ingress annotations
 
-**Next**: [Doc 11 - Helm & Workloads →](./11-helm-and-workloads.md)  
+**Next**: [Doc 11 - Helm & Workloads →](./11_helm_and_workloads.md)  
 Deploying real applications with Helm, understanding Helm chart structure, and namespace/resource strategies.
 
 ---

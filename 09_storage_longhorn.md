@@ -358,7 +358,7 @@ You now understand:
 - ✅ StatefulSets and per-pod storage
 - ✅ Reclaim policies
 
-**Next**: [Doc 10 - Ingress & LoadBalancer →](./10-ingress-and-lb.md)  
+**Next**: [Doc 10 - Ingress & LoadBalancer →](./10_ingress_and_lb.md)  
 How external traffic reaches your pods. NGINX Ingress, MetalLB for LoadBalancer Services, and TLS termination.
 
 ---

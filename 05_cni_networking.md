@@ -316,7 +316,7 @@ You now understand:
 - ✅ How veth pairs connect pods to the node network
 - ✅ Commands to debug network issues
 
-**Next**: [Doc 06 - Bootstrapping the Master Cluster →](./06-master-cluster-bootstrap.md)  
+**Next**: [Doc 06 - Bootstrapping the Master Cluster →](./06_master_cluster_bootstrap.md)  
 Now we actually install RKE2 and build the cluster, step by step, with every command explained.
 
 ---

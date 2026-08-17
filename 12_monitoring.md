@@ -354,7 +354,7 @@ You now understand:
 - ✅ Alertmanager for Slack notifications
 - ✅ Key Grafana dashboards to import
 
-**Next**: [Doc 13 - Troubleshooting →](./13-troubleshooting.md)  
+**Next**: [Doc 13 - Troubleshooting →](./13_troubleshooting.md)  
 When things break — and they will — here's the complete debugging playbook.
 
 ---
