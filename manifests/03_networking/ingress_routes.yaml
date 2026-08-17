@@ -6,11 +6,15 @@ metadata:
   namespace: production
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "false" # Change to true when TLS cert is bound
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
     nginx.ingress.kubernetes.io/limit-rps: "25"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.example.local
+      secretName: app-tls-cert
   rules:
     - host: app.example.local
       http:

@@ -7,24 +7,30 @@ resources:
   - 01_core/resource_quotas.yaml
   - 01_core/limit_ranges.yaml
 
-  # 02. RBAC & Service Accounts
+  # 02. Secrets, ConfigMaps & Registry Auth
+  - 02_secrets_and_configs/docker_registry_secret.yaml
+  - 02_secrets_and_configs/backend_secrets.yaml
+  - 02_secrets_and_configs/frontend_secrets_and_config.yaml
+  - 02_secrets_and_configs/tls_ingress_secret.yaml
+
+  # 03. RBAC & Service Accounts
   - 02_rbac/developer_roles.yaml
   - 02_rbac/cicd_serviceaccount.yaml
 
-  # 03. Networking & Traffic
+  # 04. Networking & Traffic
   - 03_networking/metallb_config.yaml
   - 03_networking/network_policies.yaml
   - 03_networking/ingress_routes.yaml
 
-  # 04. Storage
+  # 05. Storage
   - 04_storage/storage_classes.yaml
   - 04_storage/pvc_examples.yaml
 
-  # 05. Monitoring Alert Rules
+  # 06. Monitoring Alert Rules
   - 05_monitoring/custom_alert_rules.yaml
   - 05_monitoring/alertmanager_config_secret.yaml
 
-  # 06. Applications & Autoscaling
+  # 07. Applications & Autoscaling
   - 06_workloads/hello_app_deployment.yaml
   - 06_workloads/mysql_statefulset.yaml
   - 06_workloads/hpa_autoscaling.yaml

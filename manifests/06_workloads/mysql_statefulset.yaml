@@ -32,14 +32,35 @@ spec:
         app: mysql
         role: backend
     spec:
+      # Private Image Pull Secret
+      imagePullSecrets:
+        - name: dockerhub-registry-secret
+
       containers:
         - name: mysql
           image: mysql:8.0
+          # Secure credentials injected directly from Secret
           env:
             - name: MYSQL_ROOT_PASSWORD
-              value: "StrictProductionPassword987!"
+              valueFrom:
+                secretKeyRef:
+                  name: backend-database-secret
+                  key: MYSQL_ROOT_PASSWORD
             - name: MYSQL_DATABASE
-              value: "appdb"
+              valueFrom:
+                secretKeyRef:
+                  name: backend-database-secret
+                  key: MYSQL_DATABASE
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backend-database-secret
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-database-secret
+                  key: MYSQL_PASSWORD
           ports:
             - containerPort: 3306
               name: mysql
