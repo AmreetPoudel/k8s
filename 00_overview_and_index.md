@@ -58,6 +58,7 @@ Read these **in order**. Each doc builds on the previous one.
 | [12](./12_monitoring.md) | Monitoring Stack | Prometheus, Grafana, alerting, what to monitor in RKE2 |
 | [13](./13_troubleshooting.md) | Troubleshooting | crictl, journalctl, etcd debugging, CNI issues, cert failures |
 | [14](./14_interview_prep.md) | Interview Prep | 60+ questions with deep answers, mental models, war stories |
+| [architecture.md](./architecture.md) | **Production Architecture** | Complete 6-node network topology, component layers, storage mesh, and packet flow paths |
 | [manifests/](./manifests/README.md) | **IaC Manifests** | Ready-to-apply Kustomize manifests for namespaces, RBAC, storage, ingress, monitoring |
 
 ---
