@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-data-pvc
+  namespace: production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn-replicated
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: staging-db-pvc
+  namespace: staging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn-replicated
+  resources:
+    requests:
+      storage: 5Gi
