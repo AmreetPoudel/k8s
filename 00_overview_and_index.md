@@ -45,6 +45,7 @@ Read these **in order**. Each doc builds on the previous one.
 | # | Document | What You Learn |
 |---|----------|----------------|
 | [01](./01_kubernetes_and_rke2_theory.md) | Kubernetes & RKE2 Theory | What k8s is, control plane anatomy, how RKE2 differs from kubeadm/k3s/RKE1 |
+| [01b](./01b_raft_consensus_made_simple.md) | Raft Consensus Visual Guide | Step-by-step visual Raft breakdown (Election, Log Replication, Network Partitions, etcd) |
 | [02](./02_node_preparation.md) | Node Preparation | OS hardening, kernel parameters, firewall rules, why each setting exists |
 | [03](./03_pki_and_certs.md) | PKI & Certificates | How k8s TLS works, what breaks if certs expire, SANs, CA chain |
 | [04](./04_etcd_deepdive.md) | etcd Deep Dive | Raft consensus, quorum math, backup/restore, etcdctl commands |
