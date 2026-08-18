@@ -1,4 +1,4 @@
-# Doc 01: Kubernetes & RKE2 Theory
+# Doc 01: Kubernetes & RKE2 Deep Theory
 ## Before You Touch a Single Server
 
 ---
@@ -11,420 +11,359 @@ But you felt like a mechanic who can change oil but has never seen an engine.
 
 Here's the problem: **Kubernetes has 7+ major components, all TLS-mutually-authenticated, all event-driven, all distributed — and if you only ever `kubectl apply`, you never see any of it.**
 
-This document gives you the engine diagram before you build it.
+This document gives you the complete engine diagram before you build it.
 
 ---
 
-## 1.2 What Kubernetes Actually Is
+## 1.2 What Kubernetes Actually Is: The Distributed State Machine
 
-Kubernetes is a **distributed state machine**.
+Kubernetes is a **declarative distributed state machine**.
 
 You tell it: *"I want 3 replicas of my web server running."*  
 Kubernetes's job: watch reality, compare it to your desire, and reconcile.  
 Forever. Even when nodes die, pods crash, or disks fill up.
 
-This pattern is called the **control loop** (or reconciliation loop). It's the most important concept in Kubernetes.
+This pattern is called the **control loop** (or reconciliation loop). It is the foundational heartbeat of Kubernetes.
 
 ```
       ┌─────────────────────────────────┐
       │         Control Loop            │
       │                                 │
-      │  Desired State  ──────────────► │
-      │  (what you want)                │
+      │  Desired State  ──────────────► │ (What you declared in YAML / etcd)
       │                                 │
-      │  Actual State   ──────────────► │
-      │  (what exists)                  │
+      │  Actual State   ──────────────► │ (What containerd/kubelet reports)
       │                                 │
       │  diff = Desired - Actual        │
       │  → take action to reconcile     │
       └─────────────────────────────────┘
 ```
 
-Every Kubernetes controller does this. The Deployment controller, the ReplicaSet controller, the Node controller — all of them.
-
-💡 **Interview**: *"How does Kubernetes ensure desired state?"*  
-→ "Every controller runs a reconciliation loop. It watches the API server for changes to its resource type, compares actual state to desired state, and takes actions to converge. If a pod dies, the ReplicaSet controller notices the count dropped, creates a new pod spec, and schedules it. The controller never 'knows' what broke — it just sees the diff and fixes it."
+Every Kubernetes controller does this. The Deployment controller, the ReplicaSet controller, the Node controller — all of them run continuous loops comparing desired vs actual state.
 
 ---
 
 ## 1.3 The Control Plane — Every Component Explained
 
-The **control plane** is the brain. In your cluster, master-1, master-2, master-3 are the control plane nodes.
+The **control plane** is the brain. In your cluster, `master-1`, `master-2`, and `master-3` are the control plane nodes.
 
 ```
-┌─────────────────── CONTROL PLANE NODE ────────────────────┐
-│                                                            │
-│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐  │
-│  │ kube-apiserver│   │  etcd        │   │  kube-scheduler│  │
-│  │ :6443         │   │  :2379       │   │               │  │
-│  └──────┬───────┘   └──────────────┘   └───────────────┘  │
-│         │                                                   │
-│  ┌──────▼──────────────────────────────────────────────┐   │
-│  │          kube-controller-manager                     │   │
-│  │  (ReplicaSet, Node, Endpoint, Job, ... controllers)  │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                            │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │          cloud-controller-manager (optional)          │   │
-│  └──────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────── CONTROL PLANE NODE ───────────────────────────────────┐
+│                                                                                          │
+│  ┌────────────────────────┐    ┌────────────────────────┐   ┌─────────────────────────┐  │
+│  │   kube-apiserver       │    │         etcd           │   │     kube-scheduler      │  │
+│  │   Port: 6443 (REST)    │    │   Port: 2379 / 2380    │   │  [Active-Passive Lease] │  │
+│  │   [Active-Active]      │    │   [Raft Full Replic.]  │   │                         │  │
+│  └───────────▲────────────┘    └───────────▲────────────┘   └────────────▲────────────┘  │
+│              │ (Only apiserver             │                             │               │
+│              │  touches etcd!)             │ (HTTP Watch Stream)         │ (HTTP Watch)  │
+│              └─────────────────────────────┼─────────────────────────────┘               │
+│                                            │                                             │
+│  ┌─────────────────────────────────────────▼──────────────────────────────────────────┐  │
+│  │                              kube-controller-manager                               │  │
+│  │     (ReplicaSet, Deployment, Node, Endpoint, Job, ServiceAccount Controllers)      │  │
+│  │                     [Active-Passive Lease Leader Election]                         │  │
+│  └────────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                          │
+│  ⚠️ Taints Enforced: node-role.kubernetes.io/control-plane:NoSchedule                    │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### kube-apiserver
-- **The only component everything talks to**. 
-- It is a REST API server. Every `kubectl` command is an HTTP request to the API server.
-- It validates requests, authenticates them (via certs or tokens), authorizes them (via RBAC), and writes to etcd.
-- It does NOT schedule pods. It does NOT run containers. It is a dumb write-ahead store with auth.
-- Runs on port **6443** (HTTPS always).
+### 1.3.1 Active-Active vs. Active-Passive in Master Nodes
 
-⚠️ **If the API server dies, nothing NEW can be scheduled or changed. But existing running pods KEEP RUNNING.** etcd and API server are stateless enough that pods don't die when API server dies. This is critical to understand.
+Every master node runs all 4 control plane components, but they run in **two different distributed modes**:
 
-💡 **Interview**: *"If I kill the API server, do pods die?"*  
-→ "No. The kubelet on worker nodes runs containers independently. It caches the pod spec locally. If the API server is down, the kubelet can't report status or get new instructions, but existing pods keep running. Only NEW work (schedule, scale, delete) is blocked."
+#### A. `kube-apiserver` — **Active-Active (Stateless)**
+* **All 3 API servers are active simultaneously.**
+* Because the API server holds **zero state in memory** (everything lives in etcd), a request from `kubectl` or a worker node can hit Master 1, Master 2, or Master 3. They all respond identically.
+* That's why our **Keepalived VIP (`10.0.1.100:6443`)** can route requests to whichever master is currently active with zero session affinity issues.
 
-### etcd
-- **The only stateful component** in Kubernetes.
-- A distributed key-value store. Every Kubernetes object (pods, deployments, secrets, configmaps) is stored as a value in etcd.
-- Uses the **Raft consensus algorithm** to ensure all 3 etcd nodes agree before any write is committed.
-- API server is the ONLY component that reads/writes etcd directly. No other component touches etcd.
-- Runs on port **2379** (client) and **2380** (peer/replication between etcd nodes).
+#### B. `etcd` — **Active Distributed Consensus (Raft)**
+* All 3 etcd instances form **one single clustered database**.
+* Raft consensus elects **one Leader** (e.g. Master 2), while the other two are **Followers**.
+* Every write must be acknowledged by a quorum majority ($\lfloor 3/2 \rfloor + 1 = 2$) before it is committed.
 
-🔍 **Why is etcd separate?** Because Kubernetes needs a *consistent* store. etcd's Raft protocol guarantees that even if a node crashes mid-write, the data is not corrupted. A regular SQL database could split-brain. etcd cannot — it either commits to quorum or rejects the write.
+#### C. `kube-scheduler` & `kube-controller-manager` — **Active-Passive (Leader Election)**
+* All 3 masters run the process, but **only ONE master is actively making decisions**. The other two are hot standbys.
+* **Why?** 
+  * If two schedulers were active at the exact same millisecond, they would both see the same empty node, schedule two different pods to it, and overload the node.
+  * If two controller managers were active, both would see a missing replica and create duplicate pods.
+* **How it works**: They compete for a **Lease lock** (`kube-node-lease` / `kube-system`). Whichever master holds the lease is the active leader. If Master 2 crashes, Master 1 or 3 detects the expired lease within seconds and takes over instantly.
 
-### kube-scheduler
-- Watches for new pods that have no `nodeName` assigned.
-- For each unscheduled pod, it runs a **filter + score** algorithm:
-  - **Filter**: Remove nodes that can't run this pod (not enough CPU, wrong labels, taints, etc.)
-  - **Score**: Rank remaining nodes (prefer less loaded nodes, spread replicas, etc.)
-- Writes the chosen `nodeName` back to the pod spec via the API server.
-- **The scheduler does NOT start containers**. It just assigns pods to nodes.
+---
 
-### kube-controller-manager
-- A single binary that runs **20+ controllers** as goroutines.
-- Key ones:
-  - **ReplicaSet controller**: Ensures desired pod count
-  - **Deployment controller**: Manages ReplicaSets for rolling updates
-  - **Node controller**: Detects when nodes go NotReady, evicts pods after timeout
-  - **Endpoints controller**: Populates Endpoints objects for Services
-  - **Job controller**: Ensures Jobs run to completion
-  - **ServiceAccount controller**: Creates default ServiceAccounts in new namespaces
+### 1.3.2 etcd: Full Replication vs. Sharding
+
+🔍 **Is etcd data split across nodes (sharded) or duplicated?**  
+**It is FULL REPLICATION.** Every single master node holds an exact, 100% complete copy of the entire database.
+
+```
+┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
+│       MASTER 1        │   │       MASTER 2        │   │       MASTER 3        │
+│                       │   │                       │   │                       │
+│  [etcd on Master 1]   │   │  [etcd on Master 2]   │   │  [etcd on Master 3]   │
+│                       │   │                       │   │                       │
+│  📁 Full Copy of DB   │   │  📁 Full Copy of DB   │   │  📁 Full Copy of DB   │
+│  - 500 Pod specs      │   │  - 500 Pod specs      │   │  - 500 Pod specs      │
+│  - 50 Secrets         │   │  - 50 Secrets         │   │  - 50 Secrets         │
+│  - 20 Namespaces      │   │  - 20 Namespaces      │   │  - 20 Namespaces      │
+└───────────────────────┘   └───────────────────────┘   └───────────────────────┘
+```
+
+* **Why not sharding?** Kubernetes cluster metadata is small (typically a few megabytes to 1-2 GB max). Full replication ensures that if Master 1 and Master 2 are physically destroyed, Master 3 still has the complete cluster configuration ready for recovery.
+* **The Only Stateful Component**: etcd is the **ONLY stateful component** in the control plane. If you have an etcd snapshot backup file (`.db`), you have your entire cluster back.
+
+---
+
+### 1.3.3 The Golden Rule: ONLY `kube-apiserver` Touches etcd!
+
+Controllers, Schedulers, Kubelets, and `kubectl` **NEVER talk to etcd directly.**
+
+```
+                      ┌───────────────┐
+                      │     etcd      │
+                      └───────▲───────┘
+                              │ (ONLY API Server touches etcd!)
+                              ▼
+                      ┌───────────────┐
+                      │kube-apiserver │
+                      └───▲───────▲───┘
+            HTTP POST     │       │ HTTP POST
+     "Create ReplicaSet"  │       │ "Create Pods"
+                          │       │
+       ┌──────────────────┴┐     ┌┴──────────────────┐
+       │Deployment Controll│     │ReplicaSet Controll│
+       └───────────────────┘     └───────────────────┘
+```
+
+When any component wants to read or write cluster state, it sends an HTTPS REST request to `kube-apiserver`. The API server authenticates the client, validates the schema, checks RBAC permissions, and writes to etcd.
+
+---
+
+### 1.3.4 Why Kubernetes Doesn't Poll: The HTTP/2 WATCH API
+
+If 1,000 nodes polled `GET /api/v1/pods` every 1 second, the API server would melt doing thousands of TLS handshakes and JSON serializations per second.
+
+Instead, Kubernetes uses a push-based event streaming mechanism called the **WATCH API (`?watch=true`)**:
+
+```
+┌──────────────┐         gRPC Stream         ┌───────────────┐
+│     etcd     ├────────────────────────────►│kube-apiserver │
+└──────────────┘    "Key /deployments/nginx  └───────┬───────┘
+                     was just ADDED!"                │
+                                                     │ HTTP/2 Stream Event:
+                                                     │ {"type":"ADDED", "object":...}
+                                                     ▼
+                                            ┌──────────────────┐
+                                            │Deployment Control│
+                                            └──────────────────┘
+                                             (Wakes up in <1ms!)
+```
+
+* **Zero CPU when Idle**: An idle long-lived TCP connection in Linux costs **0% CPU** because the kernel uses `epoll` (event-driven I/O). The process sleeps until a packet arrives.
+* **Tiny Memory**: Each open connection is just a Linux File Descriptor (FD), consuming only ~2KB to 4KB of RAM.
+* **HTTP/2 Multiplexing**: A single TCP connection between a worker node and the API server streams events for Pods, Secrets, ConfigMaps, and Services over one single socket.
+
+---
+
+### 1.3.5 The 5-Step Relay Race: How a Pod Comes to Life
+
+Look at the complete assembly line when you create a workload:
+
+```
+1. YOU (The User)
+   Run: kubectl apply -f deployment.yaml (3 replicas)
+   ──► Sends HTTP POST to kube-apiserver, which writes Deployment to etcd.
+        │
+        ▼
+2. Deployment Controller (Watches API server)
+   "Desired is 3 nginx pods. I will create a ReplicaSet object."
+   ──► Sends HTTP POST to kube-apiserver, which writes ReplicaSet to etcd.
+        │
+        ▼
+3. ReplicaSet Controller (Watches API server)
+   "Desired count is 3, but 0 exist! I will create 3 Pod specs with nodeName: '' (blank)."
+   ──► Sends HTTP POST to kube-apiserver, which writes 3 Pods to etcd.
+        │
+        ▼
+4. kube-scheduler (Watches API server for unscheduled pods)
+   "I see 3 unassigned pods!
+    Phase 1 (Filtering): Which nodes CAN run them? (Check CPU, RAM, taints)
+    Phase 2 (Scoring): Which nodes are BEST? (Least loaded, image cached)
+    Decision: Pod 1 -> worker-1, Pod 2 -> worker-2, Pod 3 -> worker-3."
+   ──► Sends HTTP POST to kube-apiserver to bind nodeName on the pods.
+        │
+        ▼
+5. Kubelet on worker-1 (Watches API server for pods assigned to worker-1)
+   "Pod 1 is assigned to me!
+    - Calls CNI (Canal) ──► Creates network namespace and veth pair.
+    - Calls CSI (Longhorn) ──► Mounts persistent storage disk.
+    - Calls CRI (containerd) ──► Pulls image and starts container process!"
+        │
+        ▼
+   🎉 CONTAINER IS RUNNING ON THE WORKER NODE! 🎉
+```
 
 ---
 
 ## 1.4 The Worker Node — Every Component Explained
 
 ```
-┌─────────────────── WORKER NODE ───────────────────────────┐
-│                                                            │
-│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐  │
-│  │  kubelet      │   │  kube-proxy  │   │  container    │  │
-│  │  :10250       │   │  (iptables)  │   │  runtime      │  │
-│  └──────────────┘   └──────────────┘   │  (containerd) │  │
-│                                         └───────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  CNI plugin (Canal = Flannel + Calico)               │   │
-│  │  (manages pod network interfaces)                    │   │
-│  └──────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────── WORKER NODE ───────────────────────────────────┐
+│                                                                                   │
+│  ┌────────────────────────┐   ┌────────────────────────┐   ┌───────────────────┐  │
+│  │        kubelet         │   │       kube-proxy       │   │  containerd       │  │
+│  │   Port: 10250 (Host)   │   │  (iptables DNAT rules) │   │  CRI Engine       │  │
+│  └───────────▲────────────┘   └───────────▲────────────┘   └─────────▲─────────┘  │
+│              │                            │                          │            │
+│              │ (CRI Socket)               │ (Watches Services)       │            │
+│              └────────────────────────────┼──────────────────────────┘            │
+│                                           │                                       │
+│  ┌────────────────────────────────────────▼────────────────────────────────────┐  │
+│  │  Canal CNI (Flannel VXLAN UDP 8472 + Calico Felix NetworkPolicies)          │  │
+│  │  - Manages Pod IP allocations (10.42.x.x) and veth virtual cables           │  │
+│  └─────────────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### kubelet
-- **The main agent on every node** (including masters).
-- Watches the API server for pods scheduled to its node.
-- Talks to the container runtime (containerd) via CRI (Container Runtime Interface) to start/stop containers.
-- Reports node and pod status back to API server.
-- Manages pod lifecycle, volume mounts, health probes (liveness/readiness).
-
-💡 **Interview**: *"What is the CRI?"*  
-→ "Container Runtime Interface. It's a gRPC API that kubelet uses to talk to container runtimes. This is an abstraction layer — kubelet doesn't care if you're using containerd, CRI-O, or Docker (via dockershim, now removed). It just calls CRI methods: RunPodSandbox, CreateContainer, StartContainer. This is why Docker was removable — you just swap the CRI implementation."
-
-### kube-proxy
-- Implements **Service networking** on each node.
-- A Kubernetes Service is just a virtual IP (ClusterIP). kube-proxy makes that IP work.
-- In **iptables mode** (default, what Canal uses): writes iptables rules that DNAT traffic from ClusterIP to a random pod IP.
-- In **IPVS mode**: uses kernel IPVS for better performance at scale.
-- kube-proxy watches the API server for Service and Endpoints changes, updates iptables rules in real time.
-
-⚠️ **kube-proxy is NOT a proxy in the traditional sense.** It doesn't handle packets. It programs the kernel's netfilter so the kernel handles packets. This is a very common interview misconception.
-
-### Container Runtime (containerd)
-- RKE2 bundles its own **containerd** — you don't install Docker.
-- containerd manages: pulling images, creating containers, managing namespaces, managing snapshots.
-- It talks to the Linux kernel via **runc** (the actual OCI container runtime).
-
-```
-kubelet → CRI → containerd → runc → Linux kernel (namespaces + cgroups)
-```
-
-### CNI Plugin
-- When a pod is created, kubelet calls the CNI plugin to set up networking.
-- CNI creates a virtual ethernet pair (veth), puts one end in the pod's network namespace, one end on the host.
-- The plugin then ensures the pod's IP is routable to other pods (via Flannel overlay in Canal).
-- We go deep on this in Doc 05.
+### 1.4.1 Kubelet (The Node Captain)
+- **Runs as a native Linux systemd service** directly on the host OS (NOT inside a container).
+- Watches the API server for pods assigned to its specific node hostname.
+- Talks to `containerd` via the **CRI (Container Runtime Interface)** Unix socket.
+- Manages health probes (`livenessProbe`, `readinessProbe`, `startupProbe`).
+- If a container process crashes with exit code 1, **Kubelet restarts it locally** without needing the Master nodes to get involved!
 
 ---
 
-## 1.5 How RKE2 Is Different From Everything Else
+### 1.4.2 CRI (Container Runtime Interface): The Universal Socket
 
-You may hear: kubeadm, k3s, RKE1, RKE2, kops, Talos. Here's the map.
-
-### The Kubernetes Distribution Landscape
+**CRI is NOT a program; it is an open gRPC API specification.**
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Kubernetes Distributions                      │
-│                                                                  │
-│  kubeadm  →  The bare-bones bootstrap tool (official)           │
-│              Installs k8s on a single node or cluster           │
-│              YOU manage certs, etcd, upgrades manually          │
-│              No bundled CNI, no bundled ingress                  │
-│                                                                  │
-│  RKE1     →  Rancher's first distro (uses Docker daemon!)       │
-│              Deprecated. Don't use.                              │
-│                                                                  │
-│  k3s      →  Lightweight k8s (single binary, SQLite or etcd)    │
-│              Meant for edge, IoT, dev environments              │
-│              Missing some enterprise features                    │
-│                                                                  │
-│  RKE2     →  "k3s but production-grade"                         │
-│              Uses containerd (no Docker), bundled etcd          │
-│              CIS Kubernetes Benchmark hardened by default       │
-│              FIPS compliant option available                     │
-│              What we're using.                                   │
-│                                                                  │
-│  EKS/GKE  →  Cloud-managed. Control plane is hidden from you.  │
-│              You never see etcd, API server config, certs.      │
-│              NOT what we're doing.                              │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────┐      CRI gRPC over Unix Socket       ┌────────────┐
+│ Kubelet ├─────────────────────────────────────►│ containerd │
+└─────────┘   /run/containerd/containerd.sock    └────────────┘
 ```
 
-### RKE2 vs kubeadm — The Key Differences
-
-| Feature | kubeadm | RKE2 |
-|---------|---------|------|
-| Control plane as | Systemd units | Static pods (managed by rke2 agent) |
-| etcd | External or stacked | Bundled, embedded |
-| Container runtime | You choose | containerd (bundled) |
-| CIS hardening | Manual | Default |
-| Certificate management | Manual rotation | Auto-renewal built in |
-| Upgrades | Tricky | `rke2` binary upgrade |
-| CNI | You install | Canal bundled (or choose) |
-| Ingress | You install | NGINX bundled |
-
-### How RKE2 Actually Starts
-
-This is the part nobody explains. When you start RKE2 on a master:
-
-1. The `rke2 server` process starts as a systemd service.
-2. It writes **static pod manifests** to `/var/lib/rancher/rke2/agent/pod-manifests/`.
-3. The embedded **kubelet** (yes, RKE2 has its own kubelet) reads those manifests and starts the control plane components as **pods**.
-4. So `etcd`, `kube-apiserver`, `kube-controller-manager`, `kube-scheduler` are ALL PODS — not raw binaries.
-5. They live in the `kube-system` namespace but are not managed by the API server at startup (chicken-and-egg problem solved by static pods).
-
-💡 **Interview**: *"How does Kubernetes boot without itself?"*  
-→ "The chicken-and-egg problem. The API server is needed to run pods, but the control plane components themselves run as pods. The solution: static pods. The kubelet reads YAML manifests from a local directory and starts pods directly, WITHOUT contacting the API server. So etcd and the API server start as static pods managed by kubelet, then once the API server is up, everything else can start normally."
-
-### RKE2's Embedded Components
-
-When you install RKE2, you get ONE binary (`/usr/local/bin/rke2`) that contains:
-- containerd
-- kubelet
-- kubectl
-- etcd
-- All control plane components
-- Helm controller (for bundled addons)
-- NGINX ingress controller
-- Canal CNI
-- CoreDNS
-- metrics-server
-
-You don't `apt install etcd` or `apt install containerd`. RKE2 manages them all.
-
-⚠️ **This is why RKE2's containerd socket is at a non-standard path:**  
-`/run/k3s/containerd/containerd.sock` (not `/run/containerd/containerd.sock`)  
-This matters when you use `crictl` for debugging.
+* **Why CRI exists**: So Kubernetes doesn't write custom code for Docker, Podman, or Containerd. Kubelet just speaks standard CRI methods: `RunPodSandbox()`, `PullImage()`, `CreateContainer()`, `StartContainer()`, `StopContainer()`.
+* **The Engines You Can Plug In**:
+  * **`containerd`**: Industry standard (used by RKE2, EKS, GKE). Ultra-lightweight and fast.
+  * **`CRI-O`**: Red Hat runtime designed specifically for Kubernetes / Podman.
+  * **`Kata Containers`**: Hardware-isolated microVMs for extreme security.
+  * **`Docker (via cri-dockerd)`**: Docker speaks the Docker REST API, so it requires the `cri-dockerd` adapter service to translate CRI calls.
 
 ---
 
-## 1.6 The RKE2 Bootstrap Process (Step by Step)
+### 1.4.3 `kube-proxy` vs. CNI (Canal / Flannel / Calico)
 
-Understanding this sequence saves you hours of debugging.
+| Component | Real-World Role | What It Actually Does |
+|---|---|---|
+| **`kube-proxy`** | **GPS / Address Translator** | It is **NOT an in-path proxy**. It writes **DNAT rules** into the Linux kernel (`iptables`/`IPVS`) so virtual Service ClusterIPs (`10.43.x.x`) get rewritten to real Pod IPs (`10.42.x.x`) at hardware wire speed. |
+| **CNI (Flannel)** | **Plumbing & Roads** | Assigns real IP addresses (`10.42.x.x`) to pods, creates the `veth` virtual cable pair, and encapsulates cross-node packets in **VXLAN UDP port 8472** tunnels. |
+| **CNI (Calico)** | **Firewall** | Translates Kubernetes `NetworkPolicies` into Linux `iptables` `DROP`/`ACCEPT` rules to secure inter-pod communication. |
 
-```
-Step 1: Start master-1 (first server — bootstrap mode)
-  ↓
-  rke2 writes certs to /var/lib/rancher/rke2/server/tls/
-  ↓
-  rke2 starts embedded etcd (single node, not yet HA)
-  ↓
-  rke2 starts API server (uses etcd)
-  ↓
-  rke2 writes join token to /var/lib/rancher/rke2/server/node-token
-  ↓
-  kubeconfig written to /etc/rancher/rke2/rke2.yaml
-  ↓
-  master-1 is ready. Cluster exists but is NOT HA.
-
-Step 2: Start master-2 and master-3
-  ↓
-  rke2 config points to master-1's VIP (10.0.1.100:9345)
-  ↓
-  master-2 downloads certs and cluster info from master-1
-  ↓
-  master-2 joins etcd cluster (now etcd has 2 nodes — still needs 3 for quorum)
-  ↓
-  master-3 joins → etcd now has 3 nodes → QUORUM achieved → HA cluster
-
-Step 3: Start worker nodes
-  ↓
-  rke2 agent points to VIP (10.0.1.100:9345)
-  ↓
-  kubelet registers node with API server
-  ↓
-  CNI sets up networking
-  ↓
-  Node goes Ready
-```
-
-💡 **Why port 9345 for joining, not 6443?**  
-RKE2 uses port 9345 as a **registration endpoint** — a simpler HTTP(S) endpoint that returns the cluster join information (server list, token validation). The API server on port 6443 is for kubectl and component traffic. This separation means you can have a different LB policy for join traffic vs. API traffic.
+#### 🔍 Does a Pod's IP change when its container crashes and restarts?
+**NO!** The IP address belongs to the **Pod Sandbox (`pause` container / network namespace)**, NOT the individual application container. When Node.js or NGINX crashes and Kubelet restarts it, the container restarts inside the existing network namespace with the exact same IP!
 
 ---
 
-## 1.7 The Virtual IP Strategy (keepalived)
+## 1.5 The Bootstrap Sequence: How Kubernetes Boots at Time Zero ($t = 0$)
 
-You asked about a single VIP for the masters. Here's the concept.
+The chicken-and-egg problem: *The API server is needed to run pods, but the control plane components themselves run as pods. How does it start?*
+
+**The Answer: Static Pods.**
 
 ```
-         Your laptop / workers
-               ↓
-        10.0.1.100:6443  ← Virtual IP (VIP) — doesn't belong to any NIC by default
-               ↓
-         ┌─────────────────────────────────┐
-         │        keepalived               │
-         │  Running on all 3 masters       │
-         │  Uses VRRP protocol             │
-         │                                 │
-         │  master-1 (MASTER role):        │
-         │    → Owns 10.0.1.100            │
-         │    → Has it on its eth0         │
-         │                                 │
-         │  master-2, master-3 (BACKUP):   │
-         │    → Watching master-1          │
-         │    → If master-1 dies:          │
-         │      master-2 takes the VIP     │
-         └─────────────────────────────────┘
+Time 0: No API Server. No etcd. No cluster.
+        Only a raw Linux host with systemd, containerd, and Kubelet.
 ```
 
-**VRRP (Virtual Router Redundancy Protocol)**: keepalived masters send VRRP heartbeat packets to each other (multicast). If the MASTER doesn't send a heartbeat within a timeout, a BACKUP promotes itself to MASTER and assigns the VIP to its NIC.
-
-⚠️ **On AWS, VRRP multicast doesn't work natively.** You need to either:
-1. Use unicast VRRP (supported by keepalived, just extra config)
-2. Use an AWS NLB (but you said no managed services)
-3. Use HAProxy + keepalived on masters
-
-We'll configure keepalived with unicast in Doc 06 so it works on both AWS and Nutanix.
+1. **Systemd starts Kubelet and containerd** on Master 1 directly on the host OS.
+2. **Kubelet scans a local directory on the hard drive**:
+   👉 `/var/lib/rancher/rke2/agent/pod-manifests/`
+3. Inside are 4 static YAML manifests: `etcd.yaml`, `kube-apiserver.yaml`, `kube-controller-manager.yaml`, `kube-scheduler.yaml`.
+4. **Kubelet starts them directly via containerd (without an API server)**.
+5. The moment `kube-apiserver` and `etcd` start listening on port `6443` and `2379`, the cluster is born!
 
 ---
 
-## 1.8 Why Canal? (CNI Choice Explained)
+## 1.6 Keepalived, Floating VIP & VRRP Deep Dive
 
-You asked me to explain and choose. Here's the full picture.
-
-### What a CNI Must Do
-1. Assign a unique IP to every pod (from a pod CIDR, e.g., `10.42.0.0/16`)
-2. Ensure pod-to-pod traffic works across nodes
-3. Optionally enforce NetworkPolicy (firewall between pods)
-
-### Canal = Flannel + Calico
-
-| Component | Job |
-|-----------|-----|
-| **Flannel** | Pod IP assignment + overlay network (VXLAN) |
-| **Calico** | NetworkPolicy enforcement (iptables/eBPF rules) |
-
-**Flannel's VXLAN overlay**: When pod on node-1 talks to pod on node-2, Flannel wraps the packet in a VXLAN UDP packet (port 8472) addressed to node-2's real IP, then unwraps it on arrival. This is called **encapsulation**. It works on ANY network — AWS, Nutanix, bare metal — because it uses normal UDP.
+To prevent hardcoding Master 1's IP (`10.0.1.10`) into your `kubeconfig` (which would be a single point of failure), we configure a **floating Virtual IP (VIP): `10.0.1.100`** managed by **Keepalived**.
 
 ```
-Pod A (10.42.1.5)  →  Flannel  →  UDP packet to node-2:8472  →  node-2 Flannel  →  Pod B (10.42.2.3)
-[overlay]                                [underlay/real network]                     [overlay]
+                        Laptop / Worker Nodes
+                                 │
+                                 ▼
+                     Requests to 10.0.1.100:6443
+                                 │
+           ┌─────────────────────┼─────────────────────┐
+           │ (Dead)              ▼                     │
+┌───────────────────────┐   ┌───────────────────────┐  │┌───────────────────────┐
+│       MASTER 1        │   │       MASTER 2        │  ││       MASTER 3        │
+│   Real: 10.0.1.10     │   │   Real: 10.0.1.11     │  ││   Real: 10.0.1.12     │
+│      [CRASHED]        │   │   Priority: 100       │  ││   Priority: 99        │
+│                       │   │   [State: PROMOTED]   │  ││   [State: BACKUP]     │
+│                       │   │ *NOW OWNS 10.0.1.100* │  ││                       │
+└───────────────────────┘   └───────────────────────┘  │└───────────────────────┘
 ```
 
-### Why NOT Cilium (for now)?
-Cilium uses **eBPF** — a mechanism to run sandboxed programs directly in the Linux kernel. It replaces iptables entirely and is faster, but:
-- Requires kernel 5.4+ (Ubuntu 24.04 has 6.8 — fine)
-- Harder to debug when learning (eBPF isn't visible like iptables rules)
-- `kubectl exec` into pods + `iptables -L` works with Canal; doesn't show CNI rules with Cilium
+### 1.6.1 How Keepalived Knows Who the Other Masters Are (`unicast_peer`)
+Each master's `/etc/keepalived/keepalived.conf` explicitly lists the other master IPs:
 
-**Choose Canal because**: When something breaks (and it will), you can inspect with `iptables -L`, `ip route`, `ip link` — standard Linux tools you already know. Once you understand networking deeply, migrate to Cilium as a learning exercise.
+```nginx
+# On Master 1 (10.0.1.10)
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 51
+    priority 101
+    unicast_src_ip 10.0.1.10
+    unicast_peer {
+        10.0.1.11       # Master 2
+        10.0.1.12       # Master 3
+    }
+    virtual_ipaddress {
+        10.0.1.100/24 dev eth0
+    }
+}
+```
 
-💡 **Interview**: *"Why would you choose Cilium over Canal?"*  
-→ "Cilium uses eBPF to implement networking in the kernel, bypassing iptables entirely. This gives better performance at scale (no iptables chain traversal), better observability (Hubble), and L7 NetworkPolicy support (HTTP-aware rules). For large clusters (1000+ nodes), the iptables rule count becomes a performance bottleneck. Cilium also enables transparent encryption without a sidecar. The tradeoff is operational complexity and steeper debugging learning curve."
+* **`virtual_router_id 51`**: The VRRP Team ID shared across all 3 masters.
+* **`unicast_peer`**: Sends 1-second heartbeats directly between master IPs. (We use **Unicast** instead of multicast because AWS VPCs and cloud networks block multicast traffic!).
 
 ---
 
-## 1.9 Kubernetes Resource Model (The API Objects)
-
-Everything in Kubernetes is an **API resource**. When you `kubectl apply -f deployment.yaml`, you're making an HTTP POST to `/apis/apps/v1/namespaces/default/deployments`.
-
-### The Resource Hierarchy
-
-```
-Cluster
-├── Nodes
-├── Namespaces
-│   ├── Pods
-│   │   └── Containers (NOT a k8s object — managed by kubelet)
-│   ├── Deployments → ReplicaSets → Pods
-│   ├── StatefulSets → Pods
-│   ├── DaemonSets → Pods (one per node)
-│   ├── Services (ClusterIP, NodePort, LoadBalancer)
-│   ├── Ingress
-│   ├── ConfigMaps
-│   ├── Secrets
-│   ├── ServiceAccounts
-│   ├── PersistentVolumeClaims → PersistentVolumes
-│   └── NetworkPolicies
-├── ClusterRoles + ClusterRoleBindings (cluster-scoped RBAC)
-├── StorageClasses
-└── PersistentVolumes (cluster-scoped)
-```
-
-### The Pod is the Atom
-
-A pod is the smallest deployable unit. It contains:
-- One or more containers (sharing network namespace + optional volumes)
-- One network IP (all containers in a pod share the same IP, different ports)
-- Optionally: init containers, sidecar containers
-
-💡 **Interview**: *"Why do containers in a pod share an IP?"*  
-→ "Because Kubernetes networking model says one IP per pod, not per container. When the pod starts, the kubelet creates a 'pause container' (also called sandbox or infra container) whose only job is to hold the network namespace open. All other containers join that namespace. This is why containers in a pod can reach each other on localhost — they share the same network stack."
-
-### API Versioning
-
-You'll see `apiVersion: v1` vs `apiVersion: apps/v1` vs `apiVersion: networking.k8s.io/v1`. This is the API group system:
-
-- `v1` = core group (Pod, Service, ConfigMap, Secret, PersistentVolume)
-- `apps/v1` = apps group (Deployment, ReplicaSet, DaemonSet, StatefulSet)
-- `networking.k8s.io/v1` = networking group (Ingress, NetworkPolicy)
-- `rbac.authorization.k8s.io/v1` = RBAC group
+### 1.6.2 How Keepalived Detects Failures:
+1. **Server Power Loss**: Master 2 stops receiving the 1-second VRRP heartbeat. After 3 missed intervals (3s), Master 2 promotes itself.
+2. **Kubernetes API Crash (Health Check Script)**:
+   Keepalived runs `/usr/local/bin/check-rke2.sh` every 3 seconds (`curl -sk https://127.0.0.1:6443/healthz`).
+   * If the API server crashes on Master 1, the script fails.
+   * Keepalived drops Master 1's priority by 20 ($101 - 20 = \mathbf{81}$).
+   * Master 2 (priority 100) sees $100 > 81$ and claims the VIP!
 
 ---
 
-## 1.10 Summary & What Comes Next
+### 1.6.3 The Switch Hand-off: Gratuitous ARP (GARP)
+When Master 2 claims `10.0.1.100`, it broadcasts a **Gratuitous ARP** packet to the network switch:
+*"Hey switch! 10.0.1.100 is now at Master 2's MAC address!"*  
+The switch updates its MAC table in **1 millisecond**, routing all traffic to Master 2 with zero manual intervention.
 
-You now know:
-- ✅ What every control plane component does
-- ✅ What every worker node component does  
-- ✅ How RKE2 differs from kubeadm, k3s, RKE1
-- ✅ Why RKE2 uses static pods to bootstrap
-- ✅ Why Canal is the right CNI choice for learning
-- ✅ How keepalived VIP works for HA masters
-- ✅ The reconciliation loop mental model
+---
+
+## 1.7 Summary & What Comes Next
+
+You now have the complete foundational theory:
+- ✅ Why `kube-apiserver` is Active-Active while Schedulers/Controllers are Active-Passive
+- ✅ Why `etcd` is the ONLY stateful component and uses Full 100% Replication
+- ✅ How the HTTP/2 WATCH API eliminates polling and saves CPU
+- ✅ The 5-step relay race from `kubectl apply` to Kubelet container execution
+- ✅ CRI vs CNI vs `kube-proxy` division of labor
+- ✅ How Static Pods bootstrap the control plane at $t=0$
+- ✅ How Keepalived Unicast VRRP and Gratuitous ARP manage floating VIP failover
 
 **Next**: [Doc 02 - Node Preparation →](./02_node_preparation.md)  
-You'll prepare all 6 Ubuntu 24.04 servers with the exact settings RKE2 needs to not silently fail.
+You'll prepare all 6 Ubuntu 24.04 servers with the exact kernel settings, swap rules, and firewall ports RKE2 needs to not silently fail.
 
 ---
 
-*Doc 01 of 14 | RKE2 Kubernetes: From Zero to Interview-Ready*
+*Doc 01 of 14 | Complete RKE2 Kubernetes Architecture & SRE Mastery Series*
