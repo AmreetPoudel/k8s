@@ -398,7 +398,7 @@ You now understand:
 - ✅ Pod Security Standards
 - ✅ CIS benchmark basics
 
-**Next**: [Doc 09 - Storage & Longhorn →](./09-storage-longhorn.md)  
+**Next**: [Doc 09 - Storage & Longhorn →](./09_storage_longhorn.md)  
 Persistent storage in Kubernetes — how PVs, PVCs, StorageClasses work, and deploying Longhorn for distributed block storage.
 
 ---

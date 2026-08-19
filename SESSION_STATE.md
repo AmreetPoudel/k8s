@@ -2,9 +2,9 @@
 ## RKE2 Kubernetes Mastery Series
 
 > **Repository**: `https://github.com/AmreetPoudel/k8s.git`  
-> **Last Updated**: August 18, 2026  
-> **Current Status**: **Doc 01 (Theory & Architecture) 100% Mastered & Revised**  
-> **Immediate Next Step**: **Doc 02 (Linux Node Preparation & Kernel Tuning)**
+> **Last Updated**: August 19, 2026  
+> **Current Status**: **Doc 01 (Theory), Doc 01b (Raft), and Doc 02 (Node Preparation & Linux Networking) 100% Mastered**  
+> **Immediate Next Step**: **Doc 03 (PKI & Certificates) / Doc 04 (etcd Deep Dive) or Cluster Bootstrap**
 
 ---
 
@@ -33,35 +33,31 @@
 
 ---
 
-## 3. Knowledge Retention & Concepts Mastered (Doc 01)
+## 3. Knowledge Retention & Concepts Mastered
 
-1. **Active-Active vs. Active-Passive Control Plane**:
-   * `kube-apiserver`: **Active-Active** across all 3 masters because it is 100% stateless (all state lives in etcd).
-   * `kube-scheduler` & `kube-controller-manager`: **Active-Passive** with Lease locks. If two schedulers were active simultaneously, they would race and cause conflicting double-allocations.
-2. **etcd Replication & Single Source of Truth**:
-   * `etcd` is the **ONLY stateful component** in the control plane.
-   * Uses **Full 100% Replication** (no sharding). All 3 nodes have the complete database. Backups are just `etcd` snapshot files (`.db`).
-   * **The Golden Rule**: ONLY `kube-apiserver` reads/writes etcd directly. Controllers/Schedulers send HTTPS REST calls to the API server.
-3. **The HTTP/2 WATCH API vs. Polling**:
-   * Polling loops would melt CPU with thousands of TLS handshakes and JSON parsing per second.
-   * Long-lived HTTP/2 Watch streams (`?watch=true`) use Linux `epoll` event-driven I/O, consuming **0% CPU when idle and ~3KB RAM**.
-4. **The "Chicken-and-Egg" Bootstrap ($t=0$) & Static Pods**:
-   * `containerd` and `kubelet` run as native host systemd services on the OS (NOT containers).
-   * Kubelet reads local YAML files from `/var/lib/rancher/rke2/agent/pod-manifests/` (Static Pods) to launch `etcd` and `kube-apiserver` before any cluster exists.
-5. **CRI (Container Runtime Interface)**:
-   * CRI is an open gRPC interface standard.
-   * In RKE2, `containerd` is the concrete implementation listening on `--container-runtime-endpoint=unix:///run/k3s/containerd/containerd.sock`.
-6. **`kube-proxy` vs. CNI (Canal / Flannel / Calico)**:
-   * `kube-proxy`: Writes **kernel DNAT rules** (Virtual Service ClusterIP `10.43.x.x` $\rightarrow$ Pod IP `10.42.x.x`). It is not an in-path proxy.
-   * `CNI` (Flannel): Allocates real Pod IPs (`10.42.x.x`), creates `veth` pairs, and routes cross-node packets over VXLAN (UDP 8472).
-   * `CNI` (Calico): Enforces NetworkPolicy firewall rules in the Linux kernel.
-7. **Why Pod IPs Do NOT Change on Container Crash**:
-   * The Pod IP is attached to the invisible **`pause` container network namespace** (the "hotel room").
-   * When the app container crashes, Kubelet restarts it inside the existing namespace, preserving the IP address.
-8. **Keepalived & VRRP Failover**:
-   * Configured via `unicast_peer` to bypass cloud multicast blocks.
-   * When `rke2-server` crashes, `/usr/local/bin/check-rke2.sh` fails and drops Master 1's priority ($101 - 20 = 81$), allowing Master 2 (priority 100) to take the VIP.
-   * Master 2 broadcasts **Gratuitous ARP (GARP)** to update network switches in 1 millisecond.
+### From Doc 01 & 01b (Theory & Raft):
+1. **Active-Active vs. Active-Passive Control Plane**: `kube-apiserver` is stateless (Active-Active); `scheduler` & `controller-manager` use Lease locks (Active-Passive).
+2. **etcd Replication & Single Source of Truth**: 100% full replication; only `kube-apiserver` talks to etcd directly.
+3. **HTTP/2 WATCH API vs. Polling**: `epoll` event-driven streams consume ~0% CPU at idle vs polling storm.
+4. **Chicken-and-Egg Bootstrap ($t=0$)**: Native systemd Kubelet + Static Pod manifests (`/var/lib/rancher/rke2/agent/pod-manifests/`).
+5. **CRI & Pause Container**: `containerd` via gRPC socket; `pause` container namespace holds IP across pod app restarts.
+6. **Keepalived & VRRP**: Unicast VRRP failover with health scripts and Gratuitous ARP (GARP).
+
+### From Doc 02 (Node Preparation & Linux Kernel Networking):
+7. **`overlay` Module (OverlayFS)**:
+   * Provides union mount filesystem layering (`lowerdir` image layers + `upperdir` writable layer).
+   * Enables Copy-on-Write (CoW), allowing instant container startup and shared read-only base image disk space.
+8. **Linux Bridge as Layer 2 Software Switch**:
+   * Bridges (`cni0` / `cbr0`) exist in the host kernel to connect pod `veth` pairs.
+   * Being Layer 2 switches, they normally forward frames by MAC address and bypass Layer 3/4 firewalls.
+9. **`br_netfilter` & `bridge-nf-call-iptables`**:
+   * Forces Layer 2 bridged packets through Layer 3/4 `netfilter`/`iptables`.
+   * Essential because ClusterIPs are "phantom" virtual IPs with no physical/MAC presence; `iptables` (via `kube-proxy`) must intercept and perform **DNAT** to rewrite ClusterIP $\rightarrow$ real Pod IP.
+   * Without `br_netfilter`, same-node pod-to-service traffic drops silently.
+10. **Conntrack Session Tracking**:
+    * Records DNAT translations in the Linux connection tracking table so return traffic undergoes reverse-NAT (un-NAT) back to the Service IP.
+11. **Swap & cgroups Memory Management**:
+    * Swap undermines cgroup memory limits and causes unpredictable latency spikes / false evictions.
 
 ---
 
@@ -78,10 +74,4 @@
 
 ## 5. Next Planned Action
 
-When resuming in any new session:
-* Proceed directly to **Doc 02: Node Preparation** ([02_node_preparation.md](./02_node_preparation.md)).
-* Cover:
-  1. Swap memory pressure and cgroups eviction failure.
-  2. `br_netfilter` and `overlay` kernel modules.
-  3. Sysctl parameters: `bridge-nf-call-iptables = 1`, `ip_forward = 1`, `nf_conntrack_max`.
-  4. Port matrices and NTP time sync.
+* Proceed to **Doc 03: PKI and Certificate Infrastructure** ([03_pki_and_certs.md](./03_pki_and_certs.md)) or **Doc 04: etcd Deep Dive** ([04_etcd_deepdive.md](./04_etcd_deepdive.md)).

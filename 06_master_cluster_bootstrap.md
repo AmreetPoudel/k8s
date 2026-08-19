@@ -678,7 +678,7 @@ You have now:
 - ✅ kubectl set up locally
 - ✅ Verified the control plane is healthy
 
-**Next**: [Doc 07 - Worker Nodes →](./07-worker-nodes.md)  
+**Next**: [Doc 07 - Worker Nodes →](./07_worker_nodes.md)  
 Join the 3 workers, taint the masters (so workloads only run on workers), and verify the full 6-node cluster.
 
 ---

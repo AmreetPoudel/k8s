@@ -481,7 +481,7 @@ You have now:
 - ✅ Verified time sync across nodes
 - ✅ Validated disk performance for etcd
 
-**Next**: [Doc 03 - PKI & Certificates →](./03-pki-and-certificates.md)  
+**Next**: [Doc 03 - PKI & Certificates →](./03_pki_and_certs.md)  
 Before RKE2 generates certs for you, you need to understand what those certs are, what SANs they need, and what breaks when they expire.
 
 ---

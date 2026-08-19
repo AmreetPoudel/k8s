@@ -188,6 +188,13 @@ Here is the exact step-by-step lifecycle of a write (e.g., `SET name = "amrit"`)
    * The Leader's next heartbeat includes the latest `leaderCommit` index.
    * Followers see this index and apply the entry to their own local state machine.
 
+> [!TIP]
+> **Database Mental Model (PostgreSQL Sync Replication vs. Raft)**:
+> Think of Raft log replication like PostgreSQL synchronous replication:
+> * In a standard database with async replication, the primary writes to disk and immediately returns success without waiting for replicas (risk of data loss if primary dies).
+> * In Raft (and etcd), writes are **synchronously acknowledged by a quorum** before being marked committed. No single node failure can cause data loss because at least one node in any future election is guaranteed to have the committed entry.
+
+
 ---
 
 ## 5. Step 3: Network Partitions & Split-Brain Healing
