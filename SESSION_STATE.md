@@ -3,19 +3,20 @@
 
 > **Repository**: `https://github.com/AmreetPoudel/k8s.git`  
 > **Last Updated**: August 19, 2026  
-> **Current Status**: **Doc 01 (Theory), Doc 01b (Raft), and Doc 02 (Node Preparation & Linux Networking) 100% Mastered**  
-> **Immediate Next Step**: **Doc 03 (PKI & Certificates) / Doc 04 (etcd Deep Dive) or Cluster Bootstrap**
+> **Current Status**: **Doc 01 (Theory), Doc 01b (Raft), Doc 02 (Node Prep), and Doc 03 (PKI & Certificates) 100% Mastered**  
+> **Immediate Next Step**: **Doc 04 (etcd Deep Dive) or Doc 06 (Control Plane Bootstrap)**
 
 ---
 
 ## 1. User Profile, Goals & Teaching Style
 
 * **Background**: Experienced with day-to-day production Kubernetes administration (`kubectl`, logs, scaling), but the underlying control plane, bare-metal networking, and bootstrapping were a "black box" because previous clusters were pre-built.
-* **Goal**: Master raw Kubernetes (RKE2) on 6 bare-metal / cloud VMs from scratch to a Senior/Staff DevOps & SRE interview level.
+* **Goal**: Master raw Kubernetes (RKE2) on 6 bare-metal / cloud VMs from scratch to a Senior/Staff DevOps & SRE interview level before moving to EKS.
+* **Target Milestone**: **Saturday Live Deployment Sprint** — Hands-on deployment of the complete 3-Master, 3-Worker RKE2 cluster from scratch with every command typed/executed manually to build deep muscle memory.
 * **Learning Style & Preferences**:
   1. **Concrete over Abstract**: Wants side-by-side configuration files and real Linux commands (`ip addr`, `curl`, `sysctl`, `iptables`).
   2. **Revision Method**: 1 open-ended writing question at a time (NO multiple-choice). If a mistake is made, give a hint and prompt to try again.
-  3. **Cost / Lab Constraint**: Will run the live 6-node cluster on cloud for a focused 4–6 hour sprint (or locally on Multipass).
+  3. **Timeline**: Complete theoretical mastery and configuration reviews by Friday night so Saturday is dedicated 100% to the live build.
   4. **Deployment Strategy**: Manifests in `manifests/` will be deployed using **ArgoCD (GitOps)** via `kustomization.yaml`.
 
 ---
@@ -59,6 +60,21 @@
 11. **Swap & cgroups Memory Management**:
     * Swap undermines cgroup memory limits and causes unpredictable latency spikes / false evictions.
 
+### From Doc 03 (PKI & Certificate Infrastructure):
+12. **mTLS (Mutual TLS) & Zero Passwords**:
+    * Both client and server present certificates to authenticate each other.
+    * Client certificate contains identity: `CN` (Username, e.g. `system:admin` or `system:kube-scheduler`) and `O` (Group, e.g. `system:masters`).
+    * The API server authenticates via CA cryptographic signature and authorizes via RBAC.
+13. **SANs (Subject Alternative Names)**:
+    * The whitelist of valid IP addresses (e.g. VIP `10.0.1.100`) and DNS names where the API server is legally authorized to respond.
+    * Configured in RKE2 via `tls-san: ["10.0.1.100"]` in `/etc/rancher/rke2/config.yaml`.
+14. **`~/.kube/config` Authentication Flow**:
+    * Phase 1: Client verifies the server using `certificate-authority-data` and SAN check.
+    * Phase 2: Client presents `client-certificate-data` & `client-key-data`.
+    * Phase 3: API server checks signature and maps `CN`/`O` to RBAC rules.
+15. **etcd CA Isolation**:
+    * Dedicated CA at `/var/lib/rancher/rke2/server/tls/etcd/` isolates the state database, ensuring standard cluster client certs cannot talk directly to etcd on port 2379.
+
 ---
 
 ## 4. Repository Structure & Artifacts
@@ -74,4 +90,4 @@
 
 ## 5. Next Planned Action
 
-* Proceed to **Doc 03: PKI and Certificate Infrastructure** ([03_pki_and_certs.md](./03_pki_and_certs.md)) or **Doc 04: etcd Deep Dive** ([04_etcd_deepdive.md](./04_etcd_deepdive.md)).
+* Proceed to **Doc 04: etcd Deep Dive** ([04_etcd_deepdive.md](./04_etcd_deepdive.md)) or **Doc 06: Master Cluster Bootstrap** ([06_master_cluster_bootstrap.md](./06_master_cluster_bootstrap.md)).
