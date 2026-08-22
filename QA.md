@@ -525,6 +525,8 @@ spec:
             name: backend-api-svc
             port:
               number: 8080
+
+```
 ## 12. Helm & Workloads — StatefulSets vs. Deployments (Doc 11)
 
 ### Q12.1: Deployment vs. StatefulSet ("Cattle vs. Pets")
