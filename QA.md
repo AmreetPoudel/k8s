@@ -634,6 +634,7 @@ spec:
   selector:
     matchLabels:
       app: backend-api             # Discovers any Service matching this label
+```
 ## 14. Production Troubleshooting & Disaster Scenarios (Doc 13)
 
 ### Q14.1: The CoreDNS "5-Second Delay" & `ndots:5` UDP Race
