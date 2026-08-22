@@ -601,6 +601,7 @@ spec:
     spec:
       accessModes: ["ReadWriteOnce"]
       storageClassName: longhorn
+```
 ## 13. Monitoring & Observability — Prometheus, Grafana & Alertmanager (Doc 12)
 
 ### Q13.1: The Kubernetes Monitoring Stack Architecture
