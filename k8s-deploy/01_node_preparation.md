@@ -6,7 +6,58 @@
 
 ---
 
-## Step 1: Disable Linux Swap Memory
+## Step 1: Set Hostnames & Configure Local `/etc/hosts` Resolution
+
+### 🎯 The Commands:
+
+#### 1. Set Unique Hostnames (Run on each node respectively):
+```bash
+# On 10.0.2.50:
+hostnamectl set-hostname master-1
+
+# On 10.0.2.51:
+hostnamectl set-hostname master-2
+
+# On 10.0.2.52:
+hostnamectl set-hostname master-3
+
+# On 10.0.2.53:
+hostnamectl set-hostname worker-1
+
+# On 10.0.2.54:
+hostnamectl set-hostname worker-2
+
+# On 10.0.2.55:
+hostnamectl set-hostname worker-3
+```
+
+#### 2. Append Static DNS Map to `/etc/hosts` (Run on ALL 6 NODES):
+```bash
+cat <<'EOF' | tee -a /etc/hosts
+10.0.2.50 master-1
+10.0.2.51 master-2
+10.0.2.52 master-3
+10.0.2.53 worker-1
+10.0.2.54 worker-2
+10.0.2.55 worker-3
+10.0.2.60 k8s-vip.local
+EOF
+```
+
+### ❓ Why are we doing this?
+1. **Node Identity**: Kubelet and RKE2 register nodes using their exact OS hostname (`node.kubernetes.io/hostname`).
+2. **Zero-Latency Peer Discovery**: Control plane nodes (`etcd` and `kube-apiserver`) constantly communicate with each other. Having static entries in `/etc/hosts` guarantees microsecond peer lookup without relying on external DNS servers or DHCP leases.
+
+### ⚖️ Is it even necessary?
+**YES, 100% MANDATORY.** If hostnames are identical (e.g. all cloned VMs named `ubuntu`), Kubernetes cannot distinguish between nodes.
+
+### ⚠️ What happens if this command is NOT run?
+1. **Duplicate Node Collision**: If two VMs have the same hostname (e.g., `ubuntu`), the second VM overwrites the first VM's Node object in Kubernetes, causing pods to be randomly evicted.
+2. **etcd Cluster Partition**: etcd TLS certificates validate node identity against hostnames. If names fail to resolve locally, etcd peer handshake fails with `x509: certificate is valid for master-1, not localhost`.
+
+---
+
+## Step 2: Disable Linux Swap Memory
 
 ### 🎯 The Commands:
 ```bash
@@ -27,7 +78,7 @@ Kubernetes assigns pods specific memory requests and limits using Linux **cgroup
 
 ---
 
-## Step 2: Load Required Linux Kernel Modules (`overlay` & `br_netfilter`)
+## Step 3: Load Required Linux Kernel Modules (`overlay` & `br_netfilter`)
 
 ### 🎯 The Commands:
 ```bash
@@ -54,7 +105,7 @@ modprobe br_netfilter
 
 ---
 
-## Step 3: Configure Linux Kernel Network Parameters (`sysctl`)
+## Step 4: Configure Linux Kernel Network Parameters (`sysctl`)
 
 ### 🎯 The Commands:
 ```bash
@@ -86,7 +137,7 @@ sysctl --system
 
 ---
 
-## Step 4: Install Host Storage & System Dependencies (`open-iscsi`, `nfs-common`, `curl`, `jq`)
+## Step 5: Install Host Storage & System Dependencies (`open-iscsi`, `nfs-common`, `curl`, `jq`)
 
 ### 🎯 The Commands:
 ```bash
@@ -111,7 +162,7 @@ systemctl enable --now iscsid
 
 ---
 
-## Step 5: Configure Host Firewall Ports (UFW / Cloud Security Groups)
+## Step 6: Configure Host Firewall Ports (UFW / Cloud Security Groups)
 
 ### 🎯 The Commands:
 If UFW is enabled on Ubuntu:
@@ -149,7 +200,7 @@ Kubernetes components communicate across strict internal ports (API on `6443`, n
 
 ---
 
-## ✅ Step 6: Verification Checklist
+## ✅ Step 7: Verification Checklist
 
 Run this single validation test across all 6 nodes:
 

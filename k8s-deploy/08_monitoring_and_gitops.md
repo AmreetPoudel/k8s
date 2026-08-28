@@ -8,25 +8,55 @@
 
 ## Part 1: Deploy ArgoCD (GitOps Continuous Delivery Engine)
 
-### 🎯 The Commands:
+### 🎯 Step 1: Install ArgoCD via Declarative Server-Side Apply
 ```bash
-# Add official ArgoCD repository
-helm repo add argo https://argoproj.github.io/argo-helm
-helm repo update
+# 1. Create dedicated namespace
+kubectl create namespace argocd
 
-# Install ArgoCD
-helm install argocd argo/argo-cd \
-  --namespace argocd \
-  --create-namespace \
-  --set server.extraArgs="{--insecure}"
+# 2. Apply official declarative manifests with Server-Side Apply
+kubectl apply --server-side=true -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-### ❓ Why are we doing this?
-ArgoCD implements **GitOps**: instead of developers running manual `kubectl apply` commands from their laptops, Git acts as the Single Source of Truth. ArgoCD continuously monitors your Git repository and automatically synchronizes manifests to the cluster, eliminating manual configuration drift.
+> [!WARNING]
+> ### 🛑 Critical Gotcha: `metadata.annotations: Too long: may not be more than 262144 bytes`
+> * **The Symptom**: Running standard `kubectl apply -f install.yaml` fails with `The CustomResourceDefinition "applicationsets.argoproj.io" is invalid: metadata.annotations: Too long`.
+> * **The Root Cause**: Standard `kubectl apply` attempts to serialize the entire massive CRD inside the `kubectl.kubernetes.io/last-applied-configuration` annotation, exceeding Kubernetes' hard 256KB annotation limit.
+> * **The Fix**: Always use `--server-side=true`. Server-Side Apply tracks field management natively inside the API server without bloated annotations.
 
 ---
 
-### 🔑 Retrieve Initial ArgoCD Admin Password:
+### 🔑 Step 2: Configure Authentication for Private Git Repositories (SSH Deploy Keys)
+
+In enterprise environments, all infrastructure manifests live in **Private Repositories**. To give ArgoCD read-only access:
+
+1. **Generate a dedicated Deploy Key pair on your machine:**
+```bash
+ssh-keygen -t ed25519 -C "argocd-deploy-key" -f ~/.ssh/argocd_deploy_key -N ""
+```
+2. **Add the Public Key (`~/.ssh/argocd_deploy_key.pub`) to GitHub/GitLab:**
+   * Go to: `Repository Settings` $\longrightarrow$ `Deploy Keys` $\longrightarrow$ `Add Deploy Key` (Keep 'Allow write access' UNCHECKED).
+
+3. **Create the ArgoCD Repository Secret in the Cluster:**
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: private-k8s-repo-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: git@github.com:AmreetPoudel/k8s.git
+  sshPrivateKey: |
+$(sed 's/^/    /' ~/.ssh/argocd_deploy_key)
+EOF
+```
+
+---
+
+### 🔑 Step 3: Retrieve Initial ArgoCD Admin Password:
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 echo ""

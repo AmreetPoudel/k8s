@@ -1,0 +1,11 @@
+# Longhorn Production Helm Values
+defaultSettings:
+  defaultDataPath: "/var/lib/longhorn"
+  defaultReplicaCount: 3
+  replicaAutoBalance: "best-effort"
+  backupTarget: ""
+  createDefaultDiskLabeledNodes: true
+
+persistence:
+  defaultClass: true
+  defaultClassReplicaCount: 3

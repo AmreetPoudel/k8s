@@ -28,7 +28,6 @@ token: "K8sSecureEnterpriseToken2026!#"
 
 # Node Network Bindings
 node-ip: "10.0.2.51"
-bind-address: "10.0.2.51"
 advertise-address: "10.0.2.51"
 
 # Subject Alternative Names (SANs)
@@ -36,7 +35,7 @@ tls-san:
   - "10.0.2.60"
   - "10.0.2.51"
   - "master-2"
-  - "k8s.internal"
+  - "k8s-vip.local"
 
 cni:
   - "canal"
@@ -69,7 +68,6 @@ token: "K8sSecureEnterpriseToken2026!#"
 
 # Node Network Bindings
 node-ip: "10.0.2.52"
-bind-address: "10.0.2.52"
 advertise-address: "10.0.2.52"
 
 # Subject Alternative Names (SANs)
@@ -77,7 +75,7 @@ tls-san:
   - "10.0.2.60"
   - "10.0.2.52"
   - "master-3"
-  - "k8s.internal"
+  - "k8s-vip.local"
 
 cni:
   - "canal"
@@ -106,7 +104,7 @@ ln -sf /var/lib/rancher/rke2/bin/crictl /usr/local/bin/crictl
 
 mkdir -p /root/.kube
 cp /etc/rancher/rke2/rke2.yaml /root/.kube/config
-sed -i 's/127.0.0.1/10.0.2.60/g' /root/.kube/config
+sed -i 's/server: https:\/\/.*:6443/server: https:\/\/10.0.2.60:6443/g' /root/.kube/config
 chmod 600 /root/.kube/config
 
 cat <<'EOF' | tee /etc/profile.d/rke2.sh
@@ -147,4 +145,14 @@ ETCDCTL_API=3 /var/lib/rancher/rke2/bin/etcdctl \
   endpoint health
 ```
 
-Once all 3 masters and etcd endpoints are verified healthy, proceed to **[05_join_worker_nodes.md](file:///Users/amritpoudel/k8s-rke2/k8s-deploy/05_join_worker_nodes.md)**!
+---
+
+## 🛠️ Troubleshooting & Common Gotchas
+
+### 1. `Connection refused on https://10.0.2.60:9345`
+* **Root Cause**: `master-1` had `bind-address: "10.0.2.50"` explicitly configured, restricting RKE2 sockets from listening on the Floating VIP (`10.0.2.60`).
+* **Fix**: Remove `bind-address` from `/etc/rancher/rke2/config.yaml` on `master-1` and restart `rke2-server`. Verify with `curl -vk https://10.0.2.60:9345/ping` returning HTTP 200 `pong`.
+
+### 2. `failed to validate token`
+* **Root Cause**: Joining node token does not match the server cluster secret.
+* **Fix**: On `master-1`, run `cat /var/lib/rancher/rke2/server/node-token` and copy the exact full token string into `/etc/rancher/rke2/config.yaml` on joining nodes.

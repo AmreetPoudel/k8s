@@ -25,15 +25,16 @@ cat <<EOF | tee /etc/rancher/rke2/config.yaml
 # Control Plane & etcd Configuration
 token: "K8sSecureEnterpriseToken2026!#"
 node-ip: "10.0.2.50"
-bind-address: "10.0.2.50"
 advertise-address: "10.0.2.50"
+# NOTE: Do NOT set 'bind-address: 10.0.2.50' here! Omitting it lets RKE2 bind to 0.0.0.0
+# so it accepts traffic on both physical IP (10.0.2.50) and Floating VIP (10.0.2.60).
 
 # Subject Alternative Names (SANs) for TLS Certificates
 tls-san:
   - "10.0.2.60"        # Floating VIP
   - "10.0.2.50"        # Master-1 Physical IP
   - "master-1"         # Master-1 Hostname
-  - "k8s.internal"     # Internal DNS Domain
+  - "k8s-vip.local"    # VIP Local DNS
 
 # CNI Plugin
 cni:
@@ -51,6 +52,12 @@ etcd-snapshot-retention: 14
 write-kubeconfig-mode: "0600"
 EOF
 ```
+
+> [!WARNING]
+> ### 🛑 Critical HA Architectural Gotcha: Why We Omit `bind-address`
+> * **The Symptom**: Joining nodes (`master-2`, `workers`) fail with `Connection refused on https://10.0.2.60:9345`.
+> * **The Root Cause**: If you set `bind-address: "10.0.2.50"`, the Linux kernel binds RKE2 sockets exclusively to `10.0.2.50`. When traffic arrives destined for the secondary Floating VIP (`10.0.2.60`), the kernel sends a TCP RST (`Connection Refused`)!
+> * **The Fix**: Leave `bind-address` omitted (defaults to `0.0.0.0`) so the supervisor daemon listens on all local and floating IP aliases.
 
 ---
 

@@ -1,0 +1,12 @@
+# Ingress-NGINX Production Helm Values
+controller:
+  kind: DaemonSet
+  nodeSelector:
+    node-role.kubernetes.io/worker: worker
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+    annotations:
+      metallb.universe.tf/address-pool: production-public-pool
+  metrics:
+    enabled: true

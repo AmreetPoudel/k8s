@@ -34,7 +34,7 @@ When Longhorn provisions a PersistentVolume (PV), it exposes a block device on `
 
 ---
 
-## Step 3: Deploy Longhorn via Helm
+## Step 3: Deploy Longhorn via Helm (Declarative Values)
 
 ### 🎯 Run from `master-1`:
 ```bash
@@ -42,95 +42,48 @@ When Longhorn provisions a PersistentVolume (PV), it exposes a block device on `
 helm repo add longhorn https://charts.longhorn.io
 helm repo update
 
-# Install Longhorn in dedicated namespace with 3 replicas
+# Install Longhorn using our declarative values file
 helm install longhorn longhorn/longhorn \
   --namespace longhorn-system \
   --create-namespace \
-  --set defaultSettings.defaultDataPath="/var/lib/longhorn" \
-  --set defaultSettings.defaultReplicaCount=3 \
-  --set defaultSettings.backupTarget="" \
-  --set persistence.defaultClass=true \
-  --set persistence.defaultClassReplicaCount=3
+  --values manifests/01-storage/01-longhorn-values.yaml
 ```
-
-### ❓ Why `defaultReplicaCount=3`?
-Longhorn writes every block synchronously to **all 3 worker nodes** simultaneously. If Worker 1 suffers a hardware crash, the application pod can be rescheduled to Worker 2 or Worker 3 and immediately reconnect to its data with **zero data loss and zero manual recovery**.
 
 ---
 
-## Step 4: Create the Production Replicated StorageClass
+## Step 4: Apply the Production Replicated StorageClass
 
 ### 🎯 The Command:
 ```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: longhorn-replicated
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-provisioner: driver.longhorn.io
-allowVolumeExpansion: true
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
-parameters:
-  numberOfReplicas: "3"
-  staleReplicaTimeout: "30"
-  dataLocality: "best-effort"
-EOF
+kubectl apply -f manifests/01-storage/02-storageclass.yaml
 ```
 
-### 🔍 Parameter Breakdown:
-* `numberOfReplicas: "3"`: Guarantees 3 physical copies across the 3 worker nodes.
-* `dataLocality: "best-effort"`: Longhorn attempts to place a replica on the same physical worker node where the application pod is running to ensure fast local read speeds!
-* `allowVolumeExpansion: true`: Allows you to increase PVC storage dynamically (e.g. 10Gi $\rightarrow$ 50Gi) without restarting the pod.
+---
+
+## ✅ Step 5: Automated Storage Smoke Test (Zero Sleep)
+
+### ❓ What is a "Smoke Test" in Engineering?
+The term originated in electrical hardware testing: when you first turn on a newly wired circuit board, you check if **"smoke comes out"** before connecting expensive appliances.
+
+In Kubernetes infrastructure:
+A **Smoke Test** is an automated, lightweight sanity test that exercises the **entire end-to-end subsystem** (PVC request $\rightarrow$ CSI Driver $\rightarrow$ iSCSI block attachment $\rightarrow$ Ext4 formatting $\rightarrow$ Write & Read verification $\rightarrow$ clean exit).
+
+We run this test to prove that distributed storage is 100% healthy **before** deploying mission-critical databases (PostgreSQL/Redis) onto the cluster!
 
 ---
 
-## ✅ Step 5: Test Dynamic PVC Provisioning & Multi-Node Failover
-
-Run this end-to-end storage test:
-
+### 🎯 Run the Smoke Test Job:
 ```bash
-# 1. Create a Test PVC & Pod
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: storage-smoke-test-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn-replicated
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: storage-smoke-test-pod
-spec:
-  containers:
-  - name: writer
-    image: busybox
-    command: ["sh", "-c", "echo 'Longhorn storage is working 100%' > /mnt/data/test.txt && sleep 3600"]
-    volumeMounts:
-    - name: data
-      mountPath: /mnt/data
-  volumes:
-  - name: data
-    persistentVolumeClaim:
-      claimName: storage-smoke-test-pvc
-EOF
+# 1. Apply the automated Job and PVC
+kubectl apply -f manifests/01-storage/03-storage-smoke-test.yaml
 
-# 2. Wait for Pod to run and verify content
+# 2. Watch the Job complete and view the logs
 kubectl get pvc storage-smoke-test-pvc
-kubectl exec storage-smoke-test-pod -- cat /mnt/data/test.txt
+kubectl wait --for=condition=complete job/storage-smoke-test-job --timeout=120s
+kubectl logs job/storage-smoke-test-job
 
-# 3. Clean up test
-kubectl delete pod storage-smoke-test-pod
-kubectl delete pvc storage-smoke-test-pvc
+# 3. Clean up the test resources
+kubectl delete -f manifests/01-storage/03-storage-smoke-test.yaml
 ```
 
 Once Longhorn storage passes the smoke test, proceed to **[07_metallb_and_ingress.md](file:///Users/amritpoudel/k8s-rke2/k8s-deploy/07_metallb_and_ingress.md)**!
