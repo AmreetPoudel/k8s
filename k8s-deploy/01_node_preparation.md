@@ -144,8 +144,8 @@ Kubernetes components communicate across strict internal ports (API on `6443`, n
 
 ### ⚠️ What happens if this command is NOT run?
 1. **If `8472/udp` is blocked**: Pods on the same node talk fine, but cross-node pod-to-pod networking fails silently with 100% packet loss.
-2. **If `9345/tcp` is blocked**: Worker nodes cannot join the cluster and fail with `connection refused to https://10.0.1.100:9345`.
-3. **If `VRRP` is blocked**: Master-1 and Master-2 experience a split-brain condition and both try to claim the VIP `10.0.1.100` simultaneously.
+2. **If `9345/tcp` is blocked**: Worker nodes cannot join the cluster and fail with `connection refused to https://10.0.2.60:9345`.
+3. **If `VRRP` is blocked**: Master-1 and Master-2 experience a split-brain condition and both try to claim the VIP `10.0.2.60` simultaneously.
 
 ---
 

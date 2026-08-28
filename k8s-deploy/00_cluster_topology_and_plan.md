@@ -1,11 +1,12 @@
 # 00. Cluster Topology & Master Architecture Plan
 
 > **Environment**: On-Premise Nutanix AHV / Enterprise Private Cloud  
+> **Subnet**: `10.0.2.0/24`  
 > **Kubernetes Distribution**: RKE2 (Rancher Government / High-Security Kubernetes v1.30+)  
 > **CNI**: Canal (Flannel VXLAN UDP 8472 + Calico Felix NetworkPolicy)  
-> **High Availability**: 3 Control Plane Nodes + Keepalived Unicast VRRP VIP (`10.0.1.100`)  
+> **High Availability**: 3 Control Plane Nodes + Keepalived Unicast VRRP VIP (`10.0.2.60`)  
 > **Storage**: Longhorn 3-Way Synchronous Replicated Block Storage  
-> **Ingress & LB**: MetalLB Layer-2 ARP (`10.0.1.200-220`) + NGINX Ingress Controller  
+> **Ingress & LB**: MetalLB Layer-2 ARP (`10.0.2.56 - 10.0.2.59`) + NGINX Ingress Controller  
 > **GitOps & Observability**: ArgoCD + `kube-prometheus-stack` (Prometheus, Grafana, Alertmanager)
 
 ---
@@ -14,27 +15,27 @@
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 ENTERPRISE PRIVATE NETWORK (10.0.0.0/16)                               │
+│                                    MANAGEMENT NETWORK (10.0.2.0/24)                                    │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                                        │
-│  [ KEEPAlIVED FLOATING VIP: 10.0.1.100:6443 / 9345 ] (Bound to Active Master eth0)                     │
+│  [ KEEPAlIVED FLOATING VIP: 10.0.2.60:6443 / 9345 ] (Bound to Active Master eth0)                      │
 │                                                                                                        │
 │  ┌─────────────────────────────┐ ┌─────────────────────────────┐ ┌─────────────────────────────┐       │
-│  │ master-1 (10.0.1.10)        │ │ master-2 (10.0.1.11)        │ │ master-3 (10.0.1.12)        │       │
+│  │ master-1 (10.0.2.50)        │ │ master-2 (10.0.2.51)        │ │ master-3 (10.0.2.52)        │       │
 │  │ 4 vCPU | 8 GB RAM | 60GB    │ │ 4 vCPU | 8 GB RAM | 60GB    │ │ 4 vCPU | 8 GB RAM | 60GB    │       │
 │  │ etcd Member 1               │ │ etcd Member 2               │ │ etcd Member 3               │       │
 │  │ Taint: NoSchedule           │ │ Taint: NoSchedule           │ │ Taint: NoSchedule           │       │
 │  └─────────────────────────────┘ └─────────────────────────────┘ └─────────────────────────────┘       │
 │                                                                                                        │
 │  ┌─────────────────────────────┐ ┌─────────────────────────────┐ ┌─────────────────────────────┐       │
-│  │ worker-1 (10.0.2.10)        │ │ worker-2 (10.0.2.11)        │ │ worker-3 (10.0.2.12)        │       │
+│  │ worker-1 (10.0.2.53)        │ │ worker-2 (10.0.2.54)        │ │ worker-3 (10.0.2.55)        │       │
 │  │ 4 vCPU | 16 GB RAM | 100GB  │ │ 4 vCPU | 16 GB RAM | 100GB  │ │ 4 vCPU | 16 GB RAM | 100GB  │       │
 │  │ Longhorn Storage Node 1     │ │ Longhorn Storage Node 2     │ │ Longhorn Storage Node 3     │       │
 │  │ MetalLB Speaker 1           │ │ MetalLB Speaker 2           │ │ MetalLB Speaker 3           │       │
 │  │ NGINX Ingress Controller    │ │ Application Workloads       │ │ Prometheus & Grafana TSDB   │       │
 │  └─────────────────────────────┘ └─────────────────────────────┘ └─────────────────────────────┘       │
 │                                                                                                        │
-│  [ METALLB LAYER-2 IP POOL: 10.0.1.200 - 10.0.1.220 ]                                                  │
+│  [ METALLB LAYER-2 IP POOL: 10.0.2.56 - 10.0.2.59 ]                                                    │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -44,16 +45,16 @@
 
 | Node Name | Role | Physical IP | Subnet CIDR | Ports Open (Inbound) |
 | :--- | :--- | :--- | :--- | :--- |
-| **`master-1`** | Control Plane / etcd | `10.0.1.10` | `/24` | `6443` (API), `9345` (Supervisor), `2379-2380` (etcd), `10250` (Kubelet), `8472` (UDP VXLAN), `VRRP 112` |
-| **`master-2`** | Control Plane / etcd | `10.0.1.11` | `/24` | `6443` (API), `9345` (Supervisor), `2379-2380` (etcd), `10250` (Kubelet), `8472` (UDP VXLAN), `VRRP 112` |
-| **`master-3`** | Control Plane / etcd | `10.0.1.12` | `/24` | `6443` (API), `9345` (Supervisor), `2379-2380` (etcd), `10250` (Kubelet), `8472` (UDP VXLAN), `VRRP 112` |
-| **`worker-1`** | Workloads / Storage / Ingress | `10.0.2.10` | `/24` | `10250` (Kubelet), `8472` (UDP VXLAN), `9500-9502` (Longhorn), `80/443` (Ingress) |
-| **`worker-2`** | Workloads / Storage | `10.0.2.11` | `/24` | `10250` (Kubelet), `8472` (UDP VXLAN), `9500-9502` (Longhorn) |
-| **`worker-3`** | Workloads / Storage / Monitoring | `10.0.2.12` | `/24` | `10250` (Kubelet), `8472` (UDP VXLAN), `9500-9502` (Longhorn) |
-| **`API VIP`** | Floating LoadBalancer | `10.0.1.100` | `/24` | `6443` (K8s API), `9345` (RKE2 Supervisor) |
+| **`master-1`** | Control Plane / etcd | `10.0.2.50` | `10.0.2.0/24` | `6443` (API), `9345` (Supervisor), `2379-2380` (etcd), `10250` (Kubelet), `8472` (UDP VXLAN), `VRRP 112` |
+| **`master-2`** | Control Plane / etcd | `10.0.2.51` | `10.0.2.0/24` | `6443` (API), `9345` (Supervisor), `2379-2380` (etcd), `10250` (Kubelet), `8472` (UDP VXLAN), `VRRP 112` |
+| **`master-3`** | Control Plane / etcd | `10.0.2.52` | `10.0.2.0/24` | `6443` (API), `9345` (Supervisor), `2379-2380` (etcd), `10250` (Kubelet), `8472` (UDP VXLAN), `VRRP 112` |
+| **`worker-1`** | Workloads / Storage / Ingress | `10.0.2.53` | `10.0.2.0/24` | `10250` (Kubelet), `8472` (UDP VXLAN), `9500-9502` (Longhorn), `80/443` (Ingress) |
+| **`worker-2`** | Workloads / Storage | `10.0.2.54` | `10.0.2.0/24` | `10250` (Kubelet), `8472` (UDP VXLAN), `9500-9502` (Longhorn) |
+| **`worker-3`** | Workloads / Storage / Monitoring | `10.0.2.55` | `10.0.2.0/24` | `10250` (Kubelet), `8472` (UDP VXLAN), `9500-9502` (Longhorn) |
+| **`API VIP`** | Floating LoadBalancer | `10.0.2.60` | `10.0.2.0/24` | `6443` (K8s API), `9345` (RKE2 Supervisor) |
+| **`MetalLB Pool`** | External Load Balancers | `10.0.2.56 - 10.0.2.59` | `10.0.2.0/24` | Handled by MetalLB Layer-2 ARP speakers |
 | **`Pod CIDR`** | Virtual Pod Network | `10.42.0.0/16` | N/A | Handled by Flannel VXLAN |
 | **`Service CIDR`** | Virtual ClusterIPs | `10.43.0.0/16` | N/A | Handled by Linux Kernel netfilter / kube-proxy |
-| **`MetalLB Pool`** | External Load Balancers | `10.0.1.200 - 10.0.1.220` | N/A | Handled by MetalLB Layer-2 ARP speakers |
 
 ---
 

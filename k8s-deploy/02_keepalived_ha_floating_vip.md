@@ -1,7 +1,7 @@
 # 02. Keepalived High-Availability Floating VIP Configuration
 
 > **Target Nodes**: ALL 3 Control Plane Masters ONLY (`master-1`, `master-2`, `master-3`)  
-> **Floating Virtual IP (VIP)**: `10.0.1.100`  
+> **Floating Virtual IP (VIP)**: `10.0.2.60`  
 > **Interface**: `eth0` (or your primary network interface name, check with `ip -br a`)
 
 ---
@@ -14,13 +14,10 @@ apt-get install -y keepalived
 ```
 
 ### ❓ Why are we doing this?
-Keepalived provides automated Layer-3 IP failover using the Virtual Router Redundancy Protocol (VRRP). It ensures that if the active master crashes, the virtual IP (`10.0.1.100`) automatically migrates to a healthy backup master in under 1 second.
+Keepalived provides automated Layer-3 IP failover using the Virtual Router Redundancy Protocol (VRRP). It ensures that if the active master crashes, the virtual IP (`10.0.2.60`) automatically migrates to a healthy backup master in under 1 second.
 
 ### ⚖️ Is it even necessary?
-**YES, MANDATORY FOR HIGH AVAILABILITY.** Without a VIP or external hardware load balancer, worker nodes and `kubectl` would be hardcoded to a single master IP (e.g. `10.0.1.10`). If Master 1 dies, the entire cluster becomes unreachable even though Master 2 and Master 3 are healthy!
-
-### ⚠️ What happens if this is NOT run?
-If Master 1 fails, all `kubectl` commands, CI/CD pipelines, and worker node supervisor reconnects will fail immediately with `connection refused`.
+**YES, MANDATORY FOR HIGH AVAILABILITY.** Without a VIP or external hardware load balancer, worker nodes and `kubectl` would be hardcoded to a single master IP (e.g. `10.0.2.50`). If Master 1 dies, the entire cluster becomes unreachable even though Master 2 and Master 3 are healthy!
 
 ---
 
@@ -37,20 +34,11 @@ EOF
 chmod +x /usr/local/bin/check-rke2.sh
 ```
 
-### ❓ Why are we doing this?
-Keepalived runs this script every 2 seconds. If `kube-apiserver` crashes or stops responding to `/healthz` on port 6443, the script returns exit code `1`. Keepalived immediately reduces the node's VRRP priority by `weight 20` (e.g. $101 \rightarrow 81$), triggering an instant failover to the backup master!
-
-### ⚖️ Is it even necessary?
-**YES, MANDATORY.** Without a health script, Keepalived only checks if the host Linux OS is alive. If the Linux OS is running but `rke2-server` has crashed, Keepalived would keep the VIP on the dead node!
-
-### ⚠️ What happens if this script is NOT created?
-If the API server process hangs, the VIP stays pinned to the broken node, blackholing all cluster traffic.
-
 ---
 
 ## Step 3: Configure Keepalived (`keepalived.conf`)
 
-### 🎯 On `master-1` (`10.0.1.10`):
+### 🎯 On `master-1` (`10.0.2.50`):
 ```bash
 cat <<EOF | tee /etc/keepalived/keepalived.conf
 global_defs {
@@ -75,10 +63,10 @@ vrrp_instance VI_K8S {
     advert_int 1
     dont_track_primary
 
-    unicast_src_ip 10.0.1.10
+    unicast_src_ip 10.0.2.50
     unicast_peer {
-        10.0.1.11
-        10.0.1.12
+        10.0.2.51
+        10.0.2.52
     }
 
     authentication {
@@ -87,7 +75,7 @@ vrrp_instance VI_K8S {
     }
 
     virtual_ipaddress {
-        10.0.1.100/24 dev eth0 label eth0:vip
+        10.0.2.60/24 dev eth0 label eth0:vip
     }
 
     track_script {
@@ -99,7 +87,7 @@ EOF
 
 ---
 
-### 🎯 On `master-2` (`10.0.1.11`):
+### 🎯 On `master-2` (`10.0.2.51`):
 ```bash
 cat <<EOF | tee /etc/keepalived/keepalived.conf
 global_defs {
@@ -124,10 +112,10 @@ vrrp_instance VI_K8S {
     advert_int 1
     dont_track_primary
 
-    unicast_src_ip 10.0.1.11
+    unicast_src_ip 10.0.2.51
     unicast_peer {
-        10.0.1.10
-        10.0.1.12
+        10.0.2.50
+        10.0.2.52
     }
 
     authentication {
@@ -136,7 +124,7 @@ vrrp_instance VI_K8S {
     }
 
     virtual_ipaddress {
-        10.0.1.100/24 dev eth0 label eth0:vip
+        10.0.2.60/24 dev eth0 label eth0:vip
     }
 
     track_script {
@@ -148,7 +136,7 @@ EOF
 
 ---
 
-### 🎯 On `master-3` (`10.0.1.12`):
+### 🎯 On `master-3` (`10.0.2.52`):
 ```bash
 cat <<EOF | tee /etc/keepalived/keepalived.conf
 global_defs {
@@ -173,10 +161,10 @@ vrrp_instance VI_K8S {
     advert_int 1
     dont_track_primary
 
-    unicast_src_ip 10.0.1.12
+    unicast_src_ip 10.0.2.52
     unicast_peer {
-        10.0.1.10
-        10.0.1.11
+        10.0.2.50
+        10.0.2.51
     }
 
     authentication {
@@ -185,7 +173,7 @@ vrrp_instance VI_K8S {
     }
 
     virtual_ipaddress {
-        10.0.1.100/24 dev eth0 label eth0:vip
+        10.0.2.60/24 dev eth0 label eth0:vip
     }
 
     track_script {
@@ -194,14 +182,6 @@ vrrp_instance VI_K8S {
 }
 EOF
 ```
-
----
-
-### ❓ Why are we configuring `unicast_peer` instead of multicast?
-Standard VRRP uses multicast (`224.0.0.18`), which is **blocked by default in cloud virtual networks (AWS VPC, Azure VNet, GCP) and enterprise VLAN switches**. Unicast explicitly sends VRRP heartbeats directly to the peer master private IPs, guaranteeing failover works on any virtualization platform.
-
-### ⚠️ What happens if `unicast_peer` is omitted?
-Master 2 and Master 3 will never receive heartbeat packets from Master 1. Both will assume Master 1 is dead and promote themselves to MASTER, resulting in **3 duplicate VIP bindings and catastrophic ARP split-brain flapping**.
 
 ---
 
@@ -221,14 +201,14 @@ systemctl restart keepalived
 ```bash
 # On master-1:
 ip -br a show dev eth0
-# Output MUST show: 10.0.1.10/24 and 10.0.1.100/24
+# Output MUST show: 10.0.2.50/24 and 10.0.2.60/24
 ```
 
-2. **Verify Master 2 and Master 3 are in standby (do NOT hold the VIP):**
+2. **Verify Master 2 and Master 3 are in standby:**
 ```bash
 # On master-2 and master-3:
 ip -br a show dev eth0
-# Output MUST show ONLY: 10.0.1.11/24 (VIP 10.0.1.100 must NOT be present!)
+# Output MUST show ONLY: 10.0.2.51/24 (or 10.0.2.52/24)
 ```
 
 3. **Test Failover:**
@@ -238,7 +218,7 @@ systemctl stop keepalived
 
 # Immediately on master-2: Check IP
 ip -br a show dev eth0
-# Output MUST now show: 10.0.1.100/24 (Master 2 acquired the VIP in <1s!)
+# Output MUST now show: 10.0.2.60/24 (Master 2 acquired the VIP in <1s!)
 
 # On master-1: Restart keepalived
 systemctl start keepalived

@@ -170,7 +170,7 @@ kubectl get ingress -A
 ---
 
 # 🏁 Summary of the Built Production Platform:
-1. **HA Control Plane**: 3 Masters with automated Keepalived Unicast VIP (`10.0.1.100`) failover in $<1\text{s}$.
+1. **HA Control Plane**: 3 Masters with automated Keepalived Unicast VIP (`10.0.2.60`) failover in $<1\text{s}$.
 2. **etcd Quorum**: 3-node distributed Raft with automatic snapshots every 4 hours.
 3. **Dedicated Workers**: 3 Workload nodes isolated with control-plane `NoSchedule` taints.
 4. **Cloud-Native Storage**: Longhorn 3-way synchronous block mirroring over Linux `iscsid`.

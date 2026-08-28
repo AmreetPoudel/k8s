@@ -1,7 +1,7 @@
 # 07. MetalLB Layer-2 LoadBalancer & NGINX Ingress Controller
 
 > **Technology**: MetalLB (Layer-2 ARP Mode) + NGINX Ingress Controller  
-> **IP Pool**: `10.0.1.200 - 10.0.1.220` (21 External Floating Load Balancer IPs)  
+> **IP Pool**: `10.0.2.56 - 10.0.2.59` (Floating Load Balancer IPs)  
 > **Execution Location**: Run commands from `master-1` using `kubectl` and `helm`.
 
 ---
@@ -20,9 +20,6 @@ helm install metallb metallb/metallb \
   --create-namespace
 ```
 
-### ❓ Why are we doing this?
-In bare-metal and on-premise Nutanix environments, Kubernetes does **NOT** have AWS NLB or Google Cloud LoadBalancer integrations. Services of `type: LoadBalancer` get stuck permanently in `<pending>` without an external IP. MetalLB solves this by responding to Layer-2 ARP requests on your physical enterprise network, giving bare-metal Kubernetes true cloud-native LoadBalancer capability.
-
 ---
 
 ## Step 2: Configure MetalLB IP Address Pool & Layer-2 Advertisement
@@ -37,7 +34,7 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-    - 10.0.1.200-10.0.1.220
+    - 10.0.2.56-10.0.2.59
   autoAssign: true
 ---
 apiVersion: metallb.io/v1beta1
@@ -50,12 +47,6 @@ spec:
     - production-public-pool
 EOF
 ```
-
-### 🔍 How MetalLB Layer-2 ARP Works:
-1. When a `LoadBalancer` service is created, MetalLB assigns an IP from the pool (e.g. `10.0.1.200`).
-2. One of the worker nodes acts as the **Speaker** and sends Gratuitous ARP packets to the physical network switch:  
-   *"IP `10.0.1.200` has MAC address `50:6b:8d:xx:yy:zz` (Worker 1)"*.
-3. External traffic hitting `10.0.1.200` is delivered directly to Worker 1's physical NIC.
 
 ---
 
@@ -79,28 +70,10 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
 
 ---
 
-### ⚠️ Critical Architecture: Why `externalTrafficPolicy=Local` is Mandatory
-
-```
-[ CLIENT: 192.168.1.50 ]
-           │
-           ▼
-[ WORKER 1: Ingress Pod Running ] ──► (Traffic served locally) ──► Client IP PRESERVED (192.168.1.50)!
-           │
-           │ (If externalTrafficPolicy was 'Cluster')
-           ▼
-[ WORKER 2: Cross-Node SNAT ] ──► Client IP replaced with Worker-1 Node IP (10.0.2.10) ❌ (Security Logs Ruined!)
-```
-
-* **`externalTrafficPolicy: Cluster` (Default)**: Kubernetes performs Source NAT (SNAT), replacing the real client's IP address with the worker node's internal IP. Your access logs and rate-limiting rules will never see real user IPs!
-* **`externalTrafficPolicy: Local` (Production)**: Bypasses SNAT completely, preserving the true client IP address for security, audit compliance, and geo-blocking!
-
----
-
 ## ✅ Step 4: Verification & Test Ingress Application
 
 ```bash
-# 1. Verify Ingress Controller acquired an IP from MetalLB (e.g. 10.0.1.200)
+# 1. Verify Ingress Controller acquired an IP from MetalLB (e.g. 10.0.2.56)
 kubectl get svc -n ingress-nginx ingress-nginx-controller
 
 # 2. Deploy a Test App with Ingress
