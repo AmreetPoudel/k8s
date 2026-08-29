@@ -13,28 +13,23 @@
 # 1. Create dedicated namespace
 kubectl create namespace argocd
 
-# 2. Apply official declarative manifests with Server-Side Apply
-kubectl apply --server-side=true -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# 2. Apply official declarative manifests with Server-Side Apply & Force Conflicts
+kubectl apply --server-side=true --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
-
-> [!WARNING]
-> ### 🛑 Critical Gotcha: `metadata.annotations: Too long: may not be more than 262144 bytes`
-> * **The Symptom**: Running standard `kubectl apply -f install.yaml` fails with `The CustomResourceDefinition "applicationsets.argoproj.io" is invalid: metadata.annotations: Too long`.
-> * **The Root Cause**: Standard `kubectl apply` attempts to serialize the entire massive CRD inside the `kubectl.kubernetes.io/last-applied-configuration` annotation, exceeding Kubernetes' hard 256KB annotation limit.
-> * **The Fix**: Always use `--server-side=true`. Server-Side Apply tracks field management natively inside the API server without bloated annotations.
 
 ---
 
 ### 🔑 Step 2: Configure Authentication for Private Git Repositories (SSH Deploy Keys)
 
-In enterprise environments, all infrastructure manifests live in **Private Repositories**. To give ArgoCD read-only access:
+In real enterprise environments, 100% of infrastructure manifests live in **Private Repositories**. To give ArgoCD read-only access:
 
-1. **Generate a dedicated Deploy Key pair on your machine:**
+1. **Generate a dedicated Deploy Key pair on `master-1`:**
 ```bash
-ssh-keygen -t ed25519 -C "argocd-deploy-key" -f ~/.ssh/argocd_deploy_key -N ""
+ssh-keygen -t ed25519 -C "argocd-k8s-cluster" -f /root/.ssh/argocd_github_key -N ""
 ```
-2. **Add the Public Key (`~/.ssh/argocd_deploy_key.pub`) to GitHub/GitLab:**
-   * Go to: `Repository Settings` $\longrightarrow$ `Deploy Keys` $\longrightarrow$ `Add Deploy Key` (Keep 'Allow write access' UNCHECKED).
+2. **Add the Public Key (`/root/.ssh/argocd_github_key.pub`) to GitHub:**
+   * Go to: `Repository Settings` $\longrightarrow$ `Deploy Keys` $\longrightarrow$ `Add Deploy Key`.
+   * Title: `argocd-cluster` (Keep 'Allow write access' UNCHECKED for read-only security).
 
 3. **Create the ArgoCD Repository Secret in the Cluster:**
 ```bash
@@ -50,17 +45,72 @@ stringData:
   type: git
   url: git@github.com:AmreetPoudel/k8s.git
   sshPrivateKey: |
-$(sed 's/^/    /' ~/.ssh/argocd_deploy_key)
+$(sed 's/^/    /' /root/.ssh/argocd_github_key)
 EOF
 ```
 
 ---
 
-### 🔑 Step 3: Retrieve Initial ArgoCD Admin Password:
+### 🚀 Step 3: Apply the Master GitOps Root Application ("App of Apps")
+
+```bash
+cat <<'EOF' | kubectl apply -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-platform-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:AmreetPoudel/k8s.git
+    targetRevision: HEAD
+    path: manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
+```
+
+---
+
+### 🔑 Step 4: Retrieve Initial ArgoCD Admin Password:
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 echo ""
 ```
+
+---
+
+## 🛠️ Real-World GitOps Troubleshooting & Gotchas
+
+### 1. `metadata.annotations: Too long: may not be more than 262144 bytes`
+* **Symptom**: Running `kubectl apply -f install.yaml` fails on `applicationsets.argoproj.io`.
+* **Root Cause**: Client-side apply serializes the full CRD YAML into `kubectl.kubernetes.io/last-applied-configuration`, exceeding the hard 256KB annotation limit.
+* **Fix**: Always use `--server-side=true`.
+
+### 2. `Apply failed with 1 conflict: conflict with "kubectl-client-side-apply"`
+* **Symptom**: Switching from client-side apply to Server-Side Apply flags a field manager conflict.
+* **Fix**: Append `--force-conflicts` so Server-Side Apply takes full ownership of the fields.
+
+### 3. `The Kubernetes API could not find metallb.io/IPAddressPool`
+* **Symptom**: ArgoCD tries to sync Custom Resources (e.g. MetalLB IPAddressPool, Longhorn StorageClass) before the operator CRDs exist in the cluster.
+* **Root Cause**: Custom Resources cannot be instantiated if their defining CRD is not yet registered with the API server.
+* **Fix**: Install the base operator manifests (e.g. `metallb-native.yaml` or Longhorn) first, or structure ArgoCD sync waves (`argocd.argoproj.io/sync-wave`).
+
+### 4. Non-Root `kubectl` Configuration
+* **Symptom**: Non-root users (`amrit`) get `The connection to the server localhost:8080 was refused`.
+* **Fix**: Copy `/etc/rancher/rke2/rke2.yaml` to `/home/amrit/.kube/config`, replace server IP with VIP `10.0.2.60`, and `chown -R amrit:amrit /home/amrit/.kube`.
 
 ---
 
