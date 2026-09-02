@@ -47,6 +47,28 @@ spec:
               isDefault: false
               jsonData:
                 maxLines: 1000
+          dashboardProviders:
+            dashboardproviders.yaml:
+              apiVersion: 1
+              providers:
+                - name: 'default'
+                  orgId: 1
+                  folder: ''
+                  type: file
+                  disableDeletion: false
+                  editable: true
+                  options:
+                    path: /var/lib/grafana/dashboards/default
+          dashboards:
+            default:
+              k8s-loki-logs:
+                gnetId: 18494
+                revision: 1
+                datasource: Loki
+              k8s-logs-events:
+                gnetId: 15141
+                revision: 1
+                datasource: Loki
           nodeSelector:
             node-role.kubernetes.io/worker: worker
 

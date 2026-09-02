@@ -158,6 +158,15 @@ additionalDataSources:
       maxLines: 1000
 ```
 
+### D. Automated Pre-Loaded Dashboards with Dropdowns
+Grafana is pre-configured with declarative `dashboardProviders` that automatically load community Kubernetes Loki dashboards:
+* **Dashboard `18494` (Kubernetes Logs from Loki)**:
+  * Dropdown filters at the top: **Namespace $\rightarrow$ Pod $\rightarrow$ Container**.
+  * Free-text and regex search bar for fast filtering (`error`, `timeout`, `502`).
+* **Dashboard `15141` (Kubernetes / Logs & Events)**:
+  * Dropdown filters at the top: **Namespace $\rightarrow$ Workload / Deployment $\rightarrow$ Pod**.
+  * Timeline view correlating pod restart events with stderr log lines.
+
 ---
 
 ## 5. LogQL Practical Query Playbook
