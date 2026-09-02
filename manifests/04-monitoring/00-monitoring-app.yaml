@@ -39,6 +39,14 @@ spec:
             ingressClassName: nginx
             hosts:
               - grafana.internal.local
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              access: proxy
+              url: http://logging-stack-loki.logging.svc.cluster.local:3100
+              isDefault: false
+              jsonData:
+                maxLines: 1000
           nodeSelector:
             node-role.kubernetes.io/worker: worker
 

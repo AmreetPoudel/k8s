@@ -1052,3 +1052,60 @@ By assigning **PriorityClasses** and configuring `resources.requests` (Guarantee
   3. Master 2 stopped receiving heartbeats from Master 1, assumed Master 1 was dead, and promoted itself to `MASTER`.
   4. Reconfigured Keepalived to use **unicast VRRP** (`unicast_peer`) over private IPs and sent a gratuitous ARP (`arping -U`) from Master 1.
 * **Result**: Master 2 transitioned cleanly to `BACKUP`, duplicate IP was released, and API connectivity stabilized immediately.
+
+---
+
+# SECTION 15: Live Bare-Metal Implementation, MetalLB Networking, & GitOps Mastery
+
+---
+
+### Q106: Why did joining master nodes fail with `Connection refused on port 9345` when `bind-address` was configured in RKE2?
+* **Physical Cause**: Setting `bind-address: "10.0.2.50"` forces the Linux kernel socket to listen exclusively on the physical IP `10.0.2.50`. When joining nodes connect to the secondary Keepalived Floating VIP (`10.0.2.60:9345`), the kernel sends a TCP RST (`Connection Refused`) because no process is listening on `10.0.2.60`.
+* **Fix**: Omit `bind-address` (or set `0.0.0.0`) so the supervisor daemon listens on all local and floating IP aliases. Keep `node-ip: 10.0.2.50` and `advertise-address: 10.0.2.50`.
+
+---
+
+### Q107: Why does standard `kubectl apply -f install.yaml` fail on huge CRDs with `metadata.annotations: Too long: may not be more than 262144 bytes`?
+* **Physical Cause**: Client-Side Apply (`kubectl apply`) attempts to serialize the entire raw YAML text into the `kubectl.kubernetes.io/last-applied-configuration` annotation. The etcd database strictly caps any single annotation at 256 KB (262,144 bytes). Giant CRDs (e.g. `applicationsets.argoproj.io`) exceed 300 KB.
+* **Fix**: Use **Server-Side Apply** (`--server-side=true --force-conflicts`). SSA sends the YAML directly to the API Server, which tracks field ownership natively without creating bloated text annotations.
+
+---
+
+### Q108: Explain the exact packet-level difference between Global Internet Routing and Local Datacenter Switching for MetalLB.
+* **Global Internet (Layer 3 Routing)**: Across ISPs, routers ONLY inspect `Destination IP` (`10.0.2.56`) to route packets hop-by-hop across the globe to the datacenter gateway router.
+* **Local Datacenter (Layer 2 Switching)**: Once inside the local subnet (`10.0.2.0/24`), **the switch does NOT care about the IP address—it ONLY understands MAC addresses.**
+* **MetalLB's Role**: MetalLB Speaker on the elected worker node answers the gateway's ARP request: `"10.0.2.56 is at MY physical MAC address!"`. The switch delivers the electrical frame directly to that worker's physical port, where `kube-proxy` forwards it to the Pod.
+
+---
+
+### Q109: Why are `IPAddressPool` and `L2Advertisement` separate Custom Resources in MetalLB?
+* **`IPAddressPool`**: Defines **WHAT** IP addresses exist (`10.0.2.56-10.0.2.59`).
+* **`L2Advertisement`**: The **Permission Switch** that instructs worker node speakers to start answering ARP requests for that pool. It uses `nodeSelectors` (`node-role.kubernetes.io/worker: worker`) to ensure **only Worker nodes** handle application traffic, keeping Control Plane Master nodes 100% free from data plane load.
+
+---
+
+### Q110: How does ArgoCD securely authenticate to Private GitHub/GitLab Repositories in an Enterprise?
+* **Architecture**: ArgoCD uses a Pull Model (outbound connection).
+1. Generate an `ed25519` SSH key pair on the control plane.
+2. Put the **Public Key (`.pub`)** on GitHub under **Deploy Keys** (Read-Only access).
+3. Put the **Private Key** inside Kubernetes as a Secret labeled `argocd.argoproj.io/secret-type: repository` with `url: git@github.com:AmreetPoudel/k8s.git`.
+4. ArgoCD initiates the outbound SSH handshake, presents its Private Key against GitHub's Public Key, and pulls private manifests securely.
+
+---
+
+### Q111: How does Longhorn 3-way Synchronous Block Replication guarantee Zero Data Loss?
+* When a database writes a 4KB block to `/dev/longhorn/vol-1`, Longhorn Engine splits the write and simultaneously streams it over the network to all 3 worker nodes (`worker-1`, `worker-2`, `worker-3`).
+* The write is only acknowledged as successful when all 3 nodes confirm the physical write. If 1 worker crashes, the remaining 2 replicas continue serving traffic with zero data loss, and pods re-attach in $<2\text{s}$.
+
+---
+
+### Q112: What is the "Smoke Test" pattern in Cloud-Native Infrastructure, and why avoid `sleep`?
+* **Definition**: A lightweight, automated sanity test that exercises the entire end-to-end subsystem (PVC $\rightarrow$ CSI Driver $\rightarrow$ iSCSI mount $\rightarrow$ Write & Read verification $\rightarrow$ Exit) before deploying production databases.
+* **Why Kubernetes Job over Sleep**: A Pod running `sleep 3600` wastes memory and leaves background zombie processes running. A Kubernetes `Job` runs the verification payload in 1 second, asserts data integrity, and terminates cleanly with exit code 0.
+
+---
+
+### Q113: How does ArgoCD handle Dependency Ordering when Custom Resources depend on an uninstalled Operator?
+* **Symptom**: Sync fails with `The Kubernetes API could not find metallb.io/IPAddressPool`.
+* **Root Cause**: Custom Resources cannot be instantiated before their parent CRD is registered with the API server.
+* **Fix**: Install the operator base manifests first (or configure ArgoCD Sync Waves: Wave 0 for CRDs/Operators, Wave 1 for Custom Resources). ArgoCD automatically detects new CRDs and self-heals in the next reconciliation loop.

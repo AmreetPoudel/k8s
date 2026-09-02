@@ -6,47 +6,43 @@
 
 ---
 
-## Step 1: Deploy MetalLB via Helm
-
-### 🎯 The Commands:
-```bash
-# Add official MetalLB repository
-helm repo add metallb https://metallb.github.io/metallb
-helm repo update
-
-# Install MetalLB
-helm install metallb metallb/metallb \
-  --namespace metallb-system \
-  --create-namespace
-```
-
----
-
-## Step 2: Configure MetalLB IP Address Pool & Layer-2 Advertisement
+## Step 1: Deploy MetalLB Native Manifests
 
 ### 🎯 The Command:
 ```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: production-public-pool
-  namespace: metallb-system
-spec:
-  addresses:
-    - 10.0.2.56-10.0.2.59
-  autoAssign: true
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: l2-advertisement
-  namespace: metallb-system
-spec:
-  ipAddressPools:
-    - production-public-pool
-EOF
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
 ```
+
+---
+
+## Step 2: Apply Declarative IP Pool & Layer-2 Advertisement
+
+### 🎯 The Commands:
+```bash
+kubectl apply -f manifests/02-metallb/01-ipaddresspool.yaml
+kubectl apply -f manifests/02-metallb/02-l2advertisement.yaml
+```
+
+---
+
+## 🧠 Physical Networking Deep Dive: Layer-2 (MAC/ARP) vs Layer-3 (BGP)
+
+### 1. The Fundamental Law of Ethernet: Why MAC is Mandatory
+On any physical wire, fiber cable, or virtual switch (Nutanix AHV OVS), **a network switch does NOT understand IP addresses—it ONLY understands MAC addresses.**
+* **Layer 3 (IP)**: Used by global internet routers across the world to get packets to your datacenter gateway.
+* **Layer 2 (MAC)**: The mandatory physical envelope used by the local datacenter switch to deliver electrical bits to the exact physical network port.
+
+### 2. The 2 Actors of MetalLB:
+* **The Controller (1 Pod on Master)**: The Bookkeeper. Watches for `type: LoadBalancer` services and assigns an unused IP from `production-public-pool` (`10.0.2.56`).
+* **The Speakers (DaemonSet on all Workers)**: The Shouting Guards. Run with `hostNetwork: true`. When a client or gateway broadcasts an ARP request (`"Who has 10.0.2.56?"`), the elected worker node's speaker responds: `"10.0.2.56 is at MY physical MAC address!"`
+
+### 3. Why `L2Advertisement` is Mandatory:
+* `IPAddressPool` only defines **WHAT** IPs exist.
+* `L2Advertisement` is the **PERMISSION SWITCH** that authorizes worker node speakers to start answering ARP requests on the switch. It restricts announcements strictly to worker nodes (`node-role.kubernetes.io/worker: worker`), keeping control plane master nodes completely free from application data traffic.
+
+### 4. Layer-2 (L2) Mode vs. BGP Mode:
+* **Layer-2 Mode (What we use)**: Standard single-subnet ARP announcements. Zero router configuration needed. Failover occurs via Gratuitous ARP (GARP) in $<0.2\text{s}$.
+* **BGP Mode (Enterprise Core)**: Worker nodes peer with upstream core firewalls (FortiGate/Cisco) via BGP. Enables **Equal-Cost Multi-Path (ECMP)** active-active hardware line-speed load balancing across all workers simultaneously.
 
 ---
 

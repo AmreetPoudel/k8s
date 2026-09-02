@@ -2,12 +2,14 @@
 ## RKE2 Kubernetes Mastery Series
 
 > **Repository**: `https://github.com/AmreetPoudel/k8s.git`  
-> **Last Updated**: August 29, 2026  
-> **Current Status**: **PHASE 2 LIVE MULTI-NODE BOOTSTRAP 100% COMPLETE & GITOPS SYNCED!**  
+> **Last Updated**: September 2, 2026  
+> **Current Status**: **PHASE 3 PLATFORM WORKLOADS & OBSERVABILITY FULLY GITOPS SYNCED!**  
 > **Topology**: 6 Bare-Metal VMs (3 Masters + 3 Workers on Subnet `10.0.2.0/24`)  
 > **High Availability**: Keepalived VRRP Floating VIP (`10.0.2.60`) + 3-Node etcd Raft Quorum  
-> **GitOps Continuous Delivery**: ArgoCD in-cluster engine pulling from private repo `AmreetPoudel/k8s` via SSH Deploy Keys  
-> **Next Milestone**: **PHASE 3: PLATFORM WORKLOADS (Longhorn 3-Way Storage Smoke Test, MetalLB/Ingress verification, Prometheus Stack)**
+> **Storage & Ingress**: Longhorn 3-Way Replicated Storage (`longhorn-replicated`) + MetalLB L2 + NGINX Ingress  
+> **Observability & Logging**: `kube-prometheus-stack` (Prometheus, Grafana, Alertmanager) + `loki-stack` (Loki 10Gi on Longhorn + Promtail DaemonSet on all 6 nodes)  
+> **Secrets Engine**: External Secrets Operator (ESO) + AWS IAM Roles Anywhere & Secrets Manager  
+> **Next Milestone**: **PHASE 4: PRODUCTION DATABASE HA (CloudNative-PG / PostgreSQL 3-Way Cluster) & ZERO-TRUST SECURITY (Cert-Manager / NetworkPolicies)**
 
 ---
 
