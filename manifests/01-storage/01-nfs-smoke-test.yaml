@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: synology-nfs-smoke-test-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: synology-nfs
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synology-nfs-smoke-test-job
+  namespace: default
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: nfs-validator
+        image: busybox:latest
+        command:
+          - "sh"
+          - "-c"
+          - |
+            set -e
+            echo "1. Checking dynamic NFS volume mount on Synology NAS (10.0.0.250)..."
+            df -h /mnt/nas
+
+            echo "2. Writing test payload to Synology NFS share..."
+            echo "SYNOLOGY_NFS_VERIFIED_$(date +%s)" > /mnt/nas/verification.txt
+
+            echo "3. Reading back payload from Synology NAS disk..."
+            cat /mnt/nas/verification.txt
+
+            echo "4. SUCCESS: Dynamic NFS sub-directory created, mounted as ReadWriteMany, and verified!"
+        volumeMounts:
+        - name: nas-storage
+          mountPath: /mnt/nas
+      volumes:
+      - name: nas-storage
+        persistentVolumeClaim:
+          claimName: synology-nfs-smoke-test-pvc

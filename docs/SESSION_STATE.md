@@ -2,12 +2,12 @@
 ## RKE2 Kubernetes Mastery Series
 
 > **Repository**: `https://github.com/AmreetPoudel/k8s.git`  
-> **Last Updated**: September 2, 2026  
-> **Current Status**: **PHASE 3 PLATFORM WORKLOADS & OBSERVABILITY FULLY GITOPS SYNCED!**  
+> **Last Updated**: September 7, 2026  
+> **Current Status**: **SYNOLOGY ENTERPRISE NAS STORAGE INTEGRATION ACTIVE & GITOPS SYNCED!**  
 > **Topology**: 6 Bare-Metal VMs (3 Masters + 3 Workers on Subnet `10.0.2.0/24`)  
 > **High Availability**: Keepalived VRRP Floating VIP (`10.0.2.60`) + 3-Node etcd Raft Quorum  
-> **Storage & Ingress**: Longhorn 3-Way Replicated Storage (`longhorn-replicated`) + MetalLB L2 + NGINX Ingress  
-> **Observability & Logging**: `kube-prometheus-stack` (Prometheus, Grafana, Alertmanager) + `loki-stack` (Loki 10Gi on Longhorn + Promtail DaemonSet on all 6 nodes)  
+> **Storage & Ingress**: Dedicated 3-Node Synology Enterprise NAS (`10.0.0.250`, `/volume1/k8s-lab-storage`) via NFS Dynamic Provisioner (`synology-nfs` RWX/RWO) + MetalLB L2 + NGINX Ingress  
+> **Observability & Logging**: `kube-prometheus-stack` (Prometheus, Grafana, Alertmanager) + `loki-stack` (Loki on Synology NAS + Promtail DaemonSet on all 6 nodes)  
 > **Secrets Engine**: External Secrets Operator (ESO) + AWS IAM Roles Anywhere & Secrets Manager  
 > **Next Milestone**: **PHASE 4: PRODUCTION DATABASE HA (CloudNative-PG / PostgreSQL 3-Way Cluster) & ZERO-TRUST SECURITY (Cert-Manager / NetworkPolicies)**
 
@@ -20,9 +20,10 @@
 | **`master-1`** | Control Plane / etcd | `10.0.2.50` | 4 vCPU, 8 GB RAM | 🟢 **Ready** | RKE2 Server, etcd #1, Keepalived (Prio 101, VIP `10.0.2.60`) |
 | **`master-2`** | Control Plane / etcd | `10.0.2.51` | 4 vCPU, 8 GB RAM | 🟢 **Ready** | RKE2 Server, etcd #2, Keepalived (Prio 100) |
 | **`master-3`** | Control Plane / etcd | `10.0.2.52` | 4 vCPU, 8 GB RAM | 🟢 **Ready** | RKE2 Server, etcd #3, Keepalived (Prio 99) |
-| **`worker-1`** | Workload Worker | `10.0.2.53` | 4 vCPU, 16 GB RAM | 🟢 **Ready** | RKE2 Agent, iscsid, MetalLB Speaker, Longhorn Replica |
-| **`worker-2`** | Workload Worker | `10.0.2.54` | 4 vCPU, 16 GB RAM | 🟢 **Ready** | RKE2 Agent, iscsid, MetalLB Speaker, Longhorn Replica |
-| **`worker-3`** | Workload Worker | `10.0.2.55` | 4 vCPU, 16 GB RAM | 🟢 **Ready** | RKE2 Agent, iscsid, MetalLB Speaker, Longhorn Replica |
+| **`worker-1`** | Workload Worker | `10.0.2.53` | 4 vCPU, 16 GB RAM | 🟢 **Ready** | RKE2 Agent, MetalLB Speaker, Synology NFS Client |
+| **`worker-2`** | Workload Worker | `10.0.2.54` | 4 vCPU, 16 GB RAM | 🟢 **Ready** | RKE2 Agent, MetalLB Speaker, Synology NFS Client |
+| **`worker-3`** | Workload Worker | `10.0.2.55` | 4 vCPU, 16 GB RAM | 🟢 **Ready** | RKE2 Agent, MetalLB Speaker, Synology NFS Client |
+| **`Synology NAS`**| Enterprise Shared Storage | `10.0.0.250` | 3-Node HA Cluster | 🟢 **Active** | `/volume1/k8s-lab-storage` (NFSv4.1 Dynamic Provisioner) |
 | **`VIP`** | Floating IP | `10.0.2.60` | VRRP Alias | 🟢 **Active** | Primary cluster entrypoint (`k8s-vip.local`) |
 | **`LB Pool`** | LoadBalancer Pool | `10.0.2.56-59` | 4 Public IPs | 🟢 **Assigned** | MetalLB Layer-2 ARP LoadBalancer Pool |
 

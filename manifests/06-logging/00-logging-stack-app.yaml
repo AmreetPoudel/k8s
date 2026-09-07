@@ -18,7 +18,7 @@ spec:
           isDefault: false
           persistence:
             enabled: true
-            storageClassName: longhorn-replicated
+            storageClassName: synology-nfs
             accessModes:
               - ReadWriteOnce
             size: 10Gi

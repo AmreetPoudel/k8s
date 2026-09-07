@@ -19,7 +19,7 @@ spec:
             storageSpec:
               volumeClaimTemplate:
                 spec:
-                  storageClassName: longhorn-replicated
+                  storageClassName: synology-nfs
                   accessModes: ["ReadWriteOnce"]
                   resources:
                     requests:
@@ -31,7 +31,7 @@ spec:
           adminPassword: "AdminSecurePassword2026!#"
           persistence:
             enabled: true
-            storageClassName: longhorn-replicated
+            storageClassName: synology-nfs
             accessModes: ["ReadWriteOnce"]
             size: 5Gi
           ingress:
@@ -55,7 +55,7 @@ spec:
             storage:
               volumeClaimTemplate:
                 spec:
-                  storageClassName: longhorn-replicated
+                  storageClassName: synology-nfs
                   accessModes: ["ReadWriteOnce"]
                   resources:
                     requests:
