@@ -53,3 +53,13 @@ COPY . .
 4. CI runs `sed` / `yq` to update the image tag in `manifests/07-microservices/03-backend.yaml` and `04-worker.yaml`.
 5. CI commits: `ci(gitops): deploy microservices release sha-<commit-hash> [skip ci]`.
 6. ArgoCD watches the manifests repository, detects the commit, and triggers a zero-downtime rolling update on the bare-metal RKE2 cluster!
+
+## Zero-Leak Secrets Management (AWS SSM + ESO)
+
+1. **Source of Truth**: Secrets are created in **AWS Systems Manager (SSM) Parameter Store** as encrypted `SecureString`s:
+   ```bash
+   aws ssm put-parameter --name "/production/microservices/db_password" --value "<password>" --type SecureString --region ap-south-1
+   ```
+2. **Cluster Sync**: External Secrets Operator (ESO) watches AWS SSM via a cluster-wide `ClusterSecretStore` and automatically synchronizes the secret into the `microservices` namespace as `Secret/microservices-secrets`.
+3. **Application Consumption**: Pods inject the credential via `secretKeyRef` or an in-memory `tmpfs` volume mount (`/etc/secrets/db-password`). Application code has **zero hardcoded passwords**.
+
