@@ -25,6 +25,58 @@ flowchart TD
 
 ---
 
+## 1.1 Enterprise Secrets Decoupling & Security Architecture
+
+### Why Hardcoded Credentials & ConfigMap Passwords Are Anti-Patterns
+1. **ConfigMap vs. Secret Separation**:
+   - `ConfigMap` is **strictly for non-sensitive data** (hostnames, ports, log levels, flags). It is stored unencrypted and visible to anyone inspecting manifests.
+   - Passwords, API tokens, and private keys MUST live in Kubernetes `Secret` resources or external vaults.
+2. **Eliminating Insecure Fallbacks in Code**:
+   - Source code must NEVER contain default fallback passwords (e.g. `os.getenv("DB_PASSWORD", "default123")`).
+   - If an injected secret is missing, the application must **fail fast** at startup with a critical error and refuse to boot.
+3. **Environment Variables vs. In-Memory Volume Mounts (`/etc/secrets/`)**:
+   - In Kubernetes, Kubelet injects environment variables into the container's Linux process environment (`/proc/self/environ`).
+   - However, high-security enterprise environments prefer **in-memory `tmpfs` volume mounts** (`/etc/secrets/db-password`). Environment variables can be accidentally exposed in stack traces, APM crash reporters, or child processes.
+   - Our backend and worker services implement a **Dual Secret Loader** (`load_secret`):
+     1. Prioritizes `/etc/secrets/db-password` (tmpfs volume mount).
+     2. Falls back to `DB_PASSWORD` (injected via `secretKeyRef` from a Kubernetes Secret).
+     3. If neither is present, terminates with `CRITICAL SECURITY CONFIGURATION ERROR`.
+
+### How GitOps Handles Secrets Without Committing Passwords to Git
+In GitOps, Git is the Single Source of Truth, but raw passwords must never be committed.
+
+```mermaid
+graph TD
+    subgraph GitRepo["Git Repository (GitOps)"]
+        CM["ConfigMap: microservices-config\n(Host, Port, DB Name)"]
+        Deploy["Deployment Manifests\n(References secretKeyRef: microservices-secrets)"]
+        SecEx["00-secrets.yaml.example\n(Zero raw passwords committed!)"]
+    end
+
+    subgraph Cluster["Bare-Metal Kubernetes Cluster"]
+        K8sSec["Kubernetes Secret: microservices-secrets\n(Opaque, Base64 in etcd)"]
+        Deploy -->|Mounted as env or file| Pod["Backend / Worker Pods"]
+        K8sSec -->|Injected securely| Pod
+    end
+
+    Admin["Cluster Admin / Vault / ESO"] -.->|Created Out-of-Band\nor Synced via ESO| K8sSec
+```
+
+1. **Pattern 1: Out-of-Band Cluster Secret (Direct & Simple)**:
+   The admin creates `microservices-secrets` once directly on the cluster using `kubectl`:
+   ```bash
+   kubectl create secret generic microservices-secrets \
+     --namespace microservices \
+     --from-literal=db-password="$(openssl rand -base64 24)" \
+     --dry-run=client -o yaml | kubectl apply -f -
+   ```
+2. **Pattern 2: External Secrets Operator (ESO)**:
+   The cluster already has ESO running (`manifests/05-secrets/`). An `ExternalSecret` resource pulls the password dynamically from AWS ParameterStore, HashiCorp Vault, or 1Password and automatically creates `microservices-secrets` in the cluster.
+3. **Pattern 3: SealedSecrets / Mozilla SOPS**:
+   The secret is encrypted with a public key and safely committed to Git; only the cluster controller can decrypt it.
+
+---
+
 ## 2. Multi-Stage vs. Single-Stage Docker Builds
 
 A key enterprise security and performance requirement is eliminating bloated, dangerous single-stage container builds.
