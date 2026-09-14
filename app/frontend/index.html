@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Microservices Console | GitOps Bare-Metal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0B0F19;
+            --bg-surface: #111827;
+            --bg-card: rgba(17, 24, 39, 0.85);
+            --bg-card-hover: #1F2937;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(99, 102, 241, 0.3);
+            --text-primary: #F9FAFB;
+            --text-secondary: #9CA3AF;
+            --text-muted: #6B7280;
+            --accent-primary: #6366F1;
+            --accent-glow: rgba(99, 102, 241, 0.25);
+            --success: #10B981;
+            --success-glow: rgba(16, 185, 129, 0.2);
+            --warning: #F59E0B;
+            --warning-glow: rgba(245, 158, 11, 0.2);
+            --danger: #EF4444;
+            --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Top Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #6366F1, #4F46E5);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: white;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .brand-text h1 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-text p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .badges {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .badge-meta {
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .badge-meta .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        /* Metrics Row */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.25rem 1.5rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--border-highlight);
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .metric-val {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        .metric-sub {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Main Grid: Form + Stream */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 880px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Task Submission Form */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-subtitle {
+            font-size: 0.825rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.1rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.4rem;
+        }
+
+        input[type="text"], textarea, select {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus, textarea:focus, select:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: var(--font-mono);
+            font-size: 0.825rem;
+        }
+
+        button.btn-primary {
+            width: 100%;
+            background: linear-gradient(135deg, #6366F1, #4F46E5);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 0.85rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            box-shadow: 0 4px 14px var(--accent-glow);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        button.btn-primary:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        button.btn-primary:active {
+            transform: translateY(1px);
+        }
+
+        /* Task Stream Table */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .btn-ghost {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: 8px;
+            padding: 0.4rem 0.75rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-ghost:hover {
+            color: var(--text-primary);
+            border-color: var(--border-highlight);
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.825rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-primary);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.7rem;
+            font-family: var(--font-mono);
+        }
+
+        .status-pill.queued {
+            background: var(--warning-glow);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .status-pill.completed {
+            background: var(--success-glow);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .pulse {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .mono {
+            font-family: var(--font-mono);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="brand">
+                <div class="brand-icon">⚡</div>
+                <div class="brand-text">
+                    <h1>Enterprise Task Microservices</h1>
+                    <p>Bare-Metal RKE2 Cluster · Synology NAS · Redis Queue · GitOps ArgoCD</p>
+                </div>
+            </div>
+            <div class="badges">
+                <div class="badge-meta">
+                    <span class="dot"></span>
+                    <span>Cluster Live</span>
+                </div>
+                <div class="badge-meta">
+                    <span>NAS: 10.0.0.250</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Metric Cards -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span>Redis Queue Depth</span>
+                    <span>📥</span>
+                </div>
+                <div class="metric-val" id="queueDepth">-</div>
+                <div class="metric-sub">Pending async tasks</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span>Processed in Postgres</span>
+                    <span>💾</span>
+                </div>
+                <div class="metric-val" id="completedCount">-</div>
+                <div class="metric-sub">Stored on Synology NAS</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span>Backend Health</span>
+                    <span>🚀</span>
+                </div>
+                <div class="metric-val" id="backendHealth" style="font-size: 1.35rem; color: var(--success);">Checking...</div>
+                <div class="metric-sub" id="backendPod">FastAPI (2 Replicas)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">
+                    <span>Active Workers</span>
+                    <span>⚙️</span>
+                </div>
+                <div class="metric-val" id="workerStatus" style="font-size: 1.35rem; color: var(--accent-primary);">Active</div>
+                <div class="metric-sub">Consumer DaemonSet / Deployment</div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Submit Task Form -->
+            <div class="card">
+                <div class="card-title">
+                    <span>⚡ Submit Cluster Task</span>
+                </div>
+                <div class="card-subtitle">
+                    Dispatches asynchronous work into Redis queue for Python background workers.
+                </div>
+
+                <form id="taskForm">
+                    <div class="form-group">
+                        <label for="taskTitle">Task Name / Job Type</label>
+                        <input type="text" id="taskTitle" placeholder="e.g. Generate Report #8492" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="taskPayload">Payload Data (JSON / Text)</label>
+                        <textarea id="taskPayload" placeholder='{"dataset": "sales-q3", "priority": "high"}'></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary" id="submitBtn">
+                        <span>Dispatch to Queue</span>
+                        <span>→</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Task Stream -->
+            <div class="card">
+                <div class="table-header">
+                    <div>
+                        <div class="card-title">Live Task Execution Stream</div>
+                        <div class="card-subtitle">Real-time records queried directly from PostgreSQL 16 (Synology NFS)</div>
+                    </div>
+                    <div class="table-actions">
+                        <button class="btn-ghost" onclick="fetchTasks()">↻ Refresh</button>
+                        <span class="badge-meta" id="pollBadge">Auto-refresh: 3s</span>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Task ID</th>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Processed By</th>
+                            </tr>
+                        </thead>
+                        <tbody id="taskTableBody">
+                            <tr>
+                                <td colspan="5" class="empty-state">Loading tasks from cluster database...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        async function fetchStats() {
+            try {
+                const res = await fetch(`${API_BASE}/stats`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                document.getElementById('queueDepth').innerText = data.redis_queue_depth >= 0 ? data.redis_queue_depth : '0';
+                document.getElementById('completedCount').innerText = data.db_completed_tasks || '0';
+                document.getElementById('backendHealth').innerText = 'Healthy';
+                document.getElementById('backendPod').innerText = `Pod: ${data.pod_name}`;
+            } catch (err) {
+                document.getElementById('backendHealth').innerText = 'Offline';
+                document.getElementById('backendHealth').style.color = 'var(--danger)';
+            }
+        }
+
+        async function fetchTasks() {
+            try {
+                const res = await fetch(`${API_BASE}/tasks`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const tasks = await res.json();
+                const tbody = document.getElementById('taskTableBody');
+
+                if (!tasks || tasks.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No tasks in database yet. Submit one using the form!</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = tasks.map(t => {
+                    const isDone = t.status === 'COMPLETED';
+                    const pillClass = isDone ? 'completed' : 'queued';
+                    const shortId = t.id.substring(0, 8);
+                    const timeStr = t.created_at ? new Date(t.created_at).toLocaleTimeString() : '-';
+                    const worker = t.processed_by || '-';
+
+                    return `
+                        <tr>
+                            <td class="mono" title="${t.id}">#${shortId}</td>
+                            <td style="font-weight: 500; color: var(--text-primary);">${escapeHtml(t.title)}</td>
+                            <td>
+                                <span class="status-pill ${pillClass}">
+                                    <span class="pulse"></span>
+                                    <span>${t.status}</span>
+                                </span>
+                            </td>
+                            <td>${timeStr}</td>
+                            <td class="mono" style="font-size: 0.75rem;">${worker}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error('Failed to fetch tasks:', err);
+            }
+        }
+
+        document.getElementById('taskForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const titleInput = document.getElementById('taskTitle');
+            const payloadInput = document.getElementById('taskPayload');
+
+            btn.disabled = true;
+            btn.innerText = 'Queuing...';
+
+            try {
+                const res = await fetch(`${API_BASE}/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: titleInput.value,
+                        payload: payloadInput.value
+                    })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                titleInput.value = '';
+                payloadInput.value = '';
+                await Promise.all([fetchStats(), fetchTasks()]);
+            } catch (err) {
+                alert(`Error submitting task: ${err.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Dispatch to Queue →';
+            }
+        });
+
+        function escapeHtml(str) {
+            return (str || '').replace(/[&<>"']/g, m => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[m]));
+        }
+
+        // Initial fetch and 3-second auto-poll
+        fetchStats();
+        fetchTasks();
+        setInterval(() => {
+            fetchStats();
+            fetchTasks();
+        }, 3000);
+    </script>
+</body>
+</html>

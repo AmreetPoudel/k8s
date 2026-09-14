@@ -1,0 +1,31 @@
+# ==============================================================================
+# ❌ ANTI-PATTERN: SINGLE-STAGE DOCKERFILE (DO NOT USE IN PRODUCTION)
+# ==============================================================================
+# Why is this an anti-pattern?
+# 1. 🛑 Massive Bloat (~1.2 GB): Contains gcc, make, dev headers, pip cache, apt cache.
+# 2. 🛑 Security Risk: Contains full C compilers and package managers. If breached,
+#    attackers can compile rootkits directly inside your pod.
+# 3. 🛑 Runs as Root: Default user is UID 0 (root), violating container hardening standards.
+# 4. 🛑 Slow Builds (The Meme): Notice how 'COPY . /app' is placed BEFORE pip install!
+#    If someone changes a comment in main.py, Docker invalidates the COPY cache,
+#    forcing pip to re-download and re-compile every single dependency from scratch!
+# ==============================================================================
+
+FROM python:3.11
+
+WORKDIR /app
+
+# Inefficient: installs full dev toolchains into the final shipped image
+RUN apt-get update && apt-get install -y gcc libpq-dev curl
+
+# ⚠️ THE TYPO MEME CAUSE:
+# Copying everything first invalidates Docker layer cache whenever ANY file changes!
+COPY . /app
+
+# Re-runs on EVERY single commit, even fixing a typo in a comment!
+RUN pip install -r requirements.txt
+
+EXPOSE 8000
+
+# Runs as root!
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
