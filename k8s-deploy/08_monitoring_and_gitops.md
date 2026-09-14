@@ -1,7 +1,7 @@
 # 08. Observability (`kube-prometheus-stack`) & GitOps (`ArgoCD`)
 
 > **Components**: Prometheus TSDB, Grafana, Alertmanager, Node Exporter, Kube-State-Metrics, ArgoCD  
-> **Storage Backend**: Backed by Longhorn 3-way replicated storage (`longhorn-replicated`)  
+> **Storage Backend**: Backed by 3-Node Synology Enterprise NAS NFS (`synology-nfs`)  
 > **Execution Location**: Run commands from `master-1` using `helm` and `kubectl`.
 
 ---
