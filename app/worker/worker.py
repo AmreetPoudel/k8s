@@ -17,7 +17,34 @@ DB_HOST = os.getenv("DB_HOST", "postgres-service")
 DB_PORT = int(os.getenv("DB_PORT", "5432"))
 DB_NAME = os.getenv("DB_NAME", "taskdb")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres123")
+
+def load_secret(env_var: str, file_env: str, default_path: str) -> str:
+    """
+    Secure secret loader prioritizing in-memory volume mounts (/etc/secrets)
+    over environment variables, and strictly failing fast without insecure hardcoded fallbacks.
+    """
+    secret_path = os.getenv(file_env, default_path)
+    if os.path.exists(secret_path):
+        try:
+            with open(secret_path, "r") as f:
+                val = f.read().strip()
+                if val:
+                    return val
+        except Exception as e:
+            logger.error(f"Error reading secret file {secret_path}: {e}")
+
+    val = os.getenv(env_var)
+    if val:
+        return val
+
+    raise RuntimeError(
+        f"CRITICAL SECURITY CONFIGURATION ERROR: Secret '{env_var}' is missing! "
+        f"It must be provided via Kubernetes Secret (env var '{env_var}' or file '{secret_path}'). "
+        "Refusing to start with insecure default credentials."
+    )
+
+DB_PASSWORD = load_secret("DB_PASSWORD", "DB_PASSWORD_FILE", "/etc/secrets/db-password")
+
 
 WORKER_ID = os.getenv("HOSTNAME", "worker-default")
 

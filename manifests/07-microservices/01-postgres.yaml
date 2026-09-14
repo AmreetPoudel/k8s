@@ -39,7 +39,10 @@ spec:
         - name: POSTGRES_USER
           value: postgres
         - name: POSTGRES_PASSWORD
-          value: postgres123
+          valueFrom:
+            secretKeyRef:
+              name: microservices-secrets
+              key: db-password
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
         ports:

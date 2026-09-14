@@ -23,6 +23,12 @@ spec:
         envFrom:
         - configMapRef:
             name: microservices-config
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: microservices-secrets
+              key: db-password
         resources:
           requests:
             cpu: 100m
