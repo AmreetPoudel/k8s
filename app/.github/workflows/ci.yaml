@@ -14,7 +14,6 @@ on:
       - 'manifests/**'
       - '.gitignore'
 
-  # Manual Dispatch: Allows manual triggers with custom SemVer bump selection
   workflow_dispatch:
     inputs:
       bump_type:
@@ -33,11 +32,16 @@ env:
 
 jobs:
   # ============================================================================
-  # JOB 1: Test & Lint Code
+  # JOB 1: Consolidated Prepare (Lint, Test, & Calculate SemVer in ONE single VM)
   # ============================================================================
-  lint-and-test:
-    name: Lint & Unit Tests
+  prepare:
+    name: Lint, Test & Calculate SemVer
     runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.semver.outputs.new_version }}
+      short_sha: ${{ steps.semver.outputs.short_sha }}
+      old_current: ${{ steps.semver.outputs.old_current }}
+      old_previous: ${{ steps.semver.outputs.old_previous }}
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -57,30 +61,13 @@ jobs:
         run: |
           flake8 app/backend --count --select=E9,F63,F7,F82 --show-source --statistics
 
-  # ============================================================================
-  # JOB 2: Calculate Next Semantic Version from releases.yaml Matrix
-  # ============================================================================
-  calculate-version:
-    name: Calculate Semantic Version
-    needs: lint-and-test
-    runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.semver.outputs.new_version }}
-      short_sha: ${{ steps.semver.outputs.short_sha }}
-      old_current: ${{ steps.semver.outputs.old_current }}
-      old_previous: ${{ steps.semver.outputs.old_previous }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Compute Next SemVer Tag
+      - name: Compute Next SemVer from releases.yaml
         id: semver
         run: |
           RELEASES_FILE="manifests/07-microservices/releases.yaml"
           CURRENT_VER=$(grep '^current:' "$RELEASES_FILE" | awk '{print $2}' | tr -d '"')
           PREVIOUS_VER=$(grep '^previous:' "$RELEASES_FILE" | awk '{print $2}' | tr -d '"')
 
-          # Default to patch if triggered via push, or use user input
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
 
           # Strip leading 'v'
@@ -92,12 +79,9 @@ jobs:
           PATCH=${PATCH:-0}
 
           if [ "$BUMP_TYPE" = "major" ]; then
-            MAJOR=$((MAJOR + 1))
-            MINOR=0
-            PATCH=0
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
           elif [ "$BUMP_TYPE" = "minor" ]; then
-            MINOR=$((MINOR + 1))
-            PATCH=0
+            MINOR=$((MINOR + 1)); PATCH=0
           else
             PATCH=$((PATCH + 1))
           fi
@@ -105,18 +89,18 @@ jobs:
           NEW_VER="v${MAJOR}.${MINOR}.${PATCH}"
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
 
-          echo "Bumping ($BUMP_TYPE): $CURRENT_VER -> $NEW_VER"
+          echo "🚀 Calculated Next SemVer ($BUMP_TYPE): $CURRENT_VER -> $NEW_VER"
           echo "new_version=$NEW_VER" >> $GITHUB_OUTPUT
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
           echo "old_current=$CURRENT_VER" >> $GITHUB_OUTPUT
           echo "old_previous=$PREVIOUS_VER" >> $GITHUB_OUTPUT
 
   # ============================================================================
-  # JOB 3: Build & Push Hardened Multi-Stage Docker Images with SemVer & SHA Tags
+  # JOB 2: Build & Push Images in Parallel (Backend, Worker, Frontend)
   # ============================================================================
   build-and-push:
     name: Build Multi-Stage Docker Images
-    needs: calculate-version
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -142,8 +126,8 @@ jobs:
         with:
           images: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}
           tags: |
-            type=raw,value=${{ needs.calculate-version.outputs.new_version }}
-            type=raw,value=sha-${{ needs.calculate-version.outputs.short_sha }}
+            type=raw,value=${{ needs.prepare.outputs.new_version }}
+            type=raw,value=sha-${{ needs.prepare.outputs.short_sha }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       # ⚡ HIGH-SPEED CACHING: GitHub Actions Cache prevents wheel re-compilation
@@ -163,7 +147,7 @@ jobs:
       - name: Scan Image for Vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:${{ needs.calculate-version.outputs.new_version }}
+          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:${{ needs.prepare.outputs.new_version }}
           format: 'table'
           exit-code: '0'
           ignore-unfixed: true
@@ -171,11 +155,11 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
   # ============================================================================
-  # JOB 4: GitOps Release & Sliding Window Matrix Rotator
+  # JOB 3: GitOps Release & Sliding Window Matrix Rotator
   # ============================================================================
   gitops-sync:
     name: Sync SemVer & Rotate Sliding Window in GitOps
-    needs: [calculate-version, build-and-push]
+    needs: [prepare, build-and-push]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -188,9 +172,9 @@ jobs:
 
       - name: Update Deployment Image Tags & Rotate 3-Version Sliding Window
         run: |
-          NEW_VER="${{ needs.calculate-version.outputs.new_version }}"
-          OLD_CUR="${{ needs.calculate-version.outputs.old_current }}"
-          OLD_PREV="${{ needs.calculate-version.outputs.old_previous }}"
+          NEW_VER="${{ needs.prepare.outputs.new_version }}"
+          OLD_CUR="${{ needs.prepare.outputs.old_current }}"
+          OLD_PREV="${{ needs.prepare.outputs.old_previous }}"
           NOW_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           RELEASES_FILE="manifests/07-microservices/releases.yaml"
 
@@ -202,9 +186,6 @@ jobs:
           sed -i -E "s|image: .*/frontend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/frontend:${NEW_VER}|g" manifests/07-microservices/05-frontend.yaml
 
           # 2. Slide the 3-Version Matrix:
-          #   fallback  <- old previous
-          #   previous  <- old current
-          #   current   <- new version
           sed -i "s|^fallback:.*|fallback: \"${OLD_PREV}\"|g" "$RELEASES_FILE"
           sed -i "s|^previous:.*|previous: \"${OLD_CUR}\"|g" "$RELEASES_FILE"
           sed -i "s|^current:.*|current: \"${NEW_VER}\"|g" "$RELEASES_FILE"
@@ -215,7 +196,7 @@ jobs:
 
       - name: Commit and Push Release to GitOps
         run: |
-          NEW_VER="${{ needs.calculate-version.outputs.new_version }}"
+          NEW_VER="${{ needs.prepare.outputs.new_version }}"
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add manifests/07-microservices/
