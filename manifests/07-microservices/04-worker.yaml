@@ -7,6 +7,7 @@ metadata:
     app: worker
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: worker
@@ -19,8 +20,8 @@ spec:
       - name: dockerhub-pull-secret
       containers:
       - name: worker
-        # In production CI/CD, the GitOps sync job updates this tag automatically with commit SHA:
-        image: amreetpoudel/worker:sha-0865334
+        # In production CI/CD, the GitOps sync job updates this tag automatically with SemVer:
+        image: amreetpoudel/worker:v1.0.0
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:

@@ -1,0 +1,15 @@
+# ==============================================================================
+# 3-VERSION SLIDING WINDOW RELEASE MATRIX (N-2 RING BUFFER)
+# ==============================================================================
+# This file tracks the active deployment and the 2 immediate fallback targets.
+# When a new release succeeds in CI:
+#   - fallback drops off and takes old 'previous'
+#   - previous takes old 'current'
+#   - current takes the new SemVer release tag
+# ==============================================================================
+
+current: "v1.0.0"
+previous: "v1.0.0"
+fallback: "v1.0.0"
+updated_at: "2026-09-14T22:00:00Z"
+last_action: "INITIAL_BASELINE"

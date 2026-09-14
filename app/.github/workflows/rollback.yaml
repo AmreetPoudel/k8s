@@ -1,0 +1,98 @@
+name: 1-Click GitOps Rollback (Sliding Window N-2)
+
+on:
+  workflow_dispatch:
+    inputs:
+      rollback_target:
+        description: 'Select Rollback Target Version from Matrix'
+        required: true
+        default: 'previous'
+        type: choice
+        options:
+          - previous
+          - fallback
+      reason:
+        description: 'Reason for rollback (Incident / Bug description)'
+        required: false
+        default: 'Production issue detected'
+
+env:
+  DOCKERHUB_USERNAME: amreetpoudel
+
+jobs:
+  execute-rollback:
+    name: Execute 1-Click GitOps Rollback
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitOps Manifests Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/k8s
+          token: ${{ secrets.GITOPS_SYNC_PAT }}
+          ref: main
+
+      - name: Read Sliding Window Release Matrix
+        id: matrix
+        run: |
+          RELEASES_FILE="manifests/07-microservices/releases.yaml"
+          CURRENT_VER=$(grep '^current:' "$RELEASES_FILE" | awk '{print $2}' | tr -d '"')
+          PREVIOUS_VER=$(grep '^previous:' "$RELEASES_FILE" | awk '{print $2}' | tr -d '"')
+          FALLBACK_VER=$(grep '^fallback:' "$RELEASES_FILE" | awk '{print $2}' | tr -d '"')
+
+          echo "Current Active:   $CURRENT_VER"
+          echo "Previous Target:  $PREVIOUS_VER"
+          echo "Fallback Target:  $FALLBACK_VER"
+
+          SELECTED_SLOT="${{ github.event.inputs.rollback_target }}"
+          if [ "$SELECTED_SLOT" = "previous" ]; then
+            TARGET_VER="$PREVIOUS_VER"
+          else
+            TARGET_VER="$FALLBACK_VER"
+          fi
+
+          if [ "$TARGET_VER" = "$CURRENT_VER" ]; then
+            echo "⚠️ Warning: Target version ($TARGET_VER) is identical to current version ($CURRENT_VER)."
+            echo "Rolling back to identical version will force a deployment refresh."
+          fi
+
+          echo "target_version=$TARGET_VER" >> $GITHUB_OUTPUT
+          echo "current_version=$CURRENT_VER" >> $GITHUB_OUTPUT
+
+      - name: Update Kubernetes Deployments to Rollback Target
+        run: |
+          TARGET="${{ steps.matrix.outputs.target_version }}"
+          echo "⚡ Rolling back microservices deployments to version: $TARGET"
+
+          # Update backend deployment
+          sed -i -E "s|image: .*/backend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/backend:${TARGET}|g" manifests/07-microservices/03-backend.yaml
+
+          # Update worker deployment
+          sed -i -E "s|image: .*/worker:.*|image: ${{ env.DOCKERHUB_USERNAME }}/worker:${TARGET}|g" manifests/07-microservices/04-worker.yaml
+
+          # Update frontend deployment
+          sed -i -E "s|image: .*/frontend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/frontend:${TARGET}|g" manifests/07-microservices/05-frontend.yaml
+
+      - name: Update Sliding Window Matrix State
+        run: |
+          TARGET="${{ steps.matrix.outputs.target_version }}"
+          NOW_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          RELEASES_FILE="manifests/07-microservices/releases.yaml"
+
+          # Update current to rollback target and record audit log
+          sed -i "s|^current:.*|current: \"${TARGET}\"|g" "$RELEASES_FILE"
+          sed -i "s|^updated_at:.*|updated_at: \"${NOW_UTC}\"|g" "$RELEASES_FILE"
+          sed -i "s|^last_action:.*|last_action: \"ROLLBACK_TO_${TARGET}\"|g" "$RELEASES_FILE"
+
+          cat "$RELEASES_FILE"
+
+      - name: Commit and Push Rollback to GitOps (Triggers ArgoCD)
+        run: |
+          TARGET="${{ steps.matrix.outputs.target_version }}"
+          REASON="${{ github.event.inputs.reason }}"
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifests/07-microservices/
+          git commit -m "rollback(gitops): roll back to ${TARGET} - ${REASON} [skip ci]"
+          git push origin main
+          echo "✅ Rollback commit pushed to main. ArgoCD is now reconciling cluster to $TARGET!"
