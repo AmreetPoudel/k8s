@@ -91,13 +91,17 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME || env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Compute Short Git SHA
+        id: vars
+        run: echo "short_sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
       - name: Extract Docker Metadata & Tags
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}
           tags: |
-            type=sha,prefix=sha-,format=short
+            type=raw,value=sha-${{ steps.vars.outputs.short_sha }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       # ⚡ HIGH-SPEED CACHING: GitHub Actions Cache prevents wheel re-compilation
@@ -117,7 +121,7 @@ jobs:
       - name: Scan Image for Vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:sha-${{ github.sha }}
+          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:sha-${{ steps.vars.outputs.short_sha }}
           format: 'table'
           exit-code: '0' # Set to 1 in strict prod to block deployment on criticals
           ignore-unfixed: true
@@ -142,22 +146,25 @@ jobs:
 
       - name: Update Deployment Image Tags
         run: |
-          NEW_TAG="sha-${{ github.sha }}"
-          echo "Updating GitOps manifests to image tag: $NEW_TAG for Docker Hub user: ${{ env.DOCKERHUB_USERNAME }}"
+          # Use 7-character short Git commit SHA for immutable, traceable deployment tags
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          NEW_TAG="sha-${SHORT_SHA}"
+          echo "Updating GitOps manifests to immutable tag: ${NEW_TAG}"
 
           # Update backend deployment image tag
-          sed -i "s|image: .*/backend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/backend:${NEW_TAG}|g" manifests/07-microservices/03-backend.yaml
+          sed -i -E "s|image: .*/backend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/backend:${NEW_TAG}|g" manifests/07-microservices/03-backend.yaml
 
           # Update worker deployment image tag
-          sed -i "s|image: .*/worker:.*|image: ${{ env.DOCKERHUB_USERNAME }}/worker:${NEW_TAG}|g" manifests/07-microservices/04-worker.yaml
+          sed -i -E "s|image: .*/worker:.*|image: ${{ env.DOCKERHUB_USERNAME }}/worker:${NEW_TAG}|g" manifests/07-microservices/04-worker.yaml
 
           # Update frontend deployment image tag
-          sed -i "s|image: .*/frontend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/frontend:${NEW_TAG}|g" manifests/07-microservices/05-frontend.yaml
+          sed -i -E "s|image: .*/frontend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/frontend:${NEW_TAG}|g" manifests/07-microservices/05-frontend.yaml
 
       - name: Commit and Push Image Tag Updates to GitOps
         run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add manifests/07-microservices/
-          git diff-index --quiet HEAD || git commit -m "ci(gitops): deploy microservices release sha-${{ github.sha }} [skip ci]"
+          git diff-index --quiet HEAD || git commit -m "ci(gitops): deploy microservices release sha-${SHORT_SHA} [skip ci]"
           git push origin main

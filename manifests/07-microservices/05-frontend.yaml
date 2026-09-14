@@ -19,7 +19,7 @@ spec:
       - name: dockerhub-pull-secret
       containers:
       - name: frontend
-        image: amreetpoudel/frontend:latest
+        image: amreetpoudel/frontend:sha-0865334
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

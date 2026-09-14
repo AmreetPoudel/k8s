@@ -33,8 +33,8 @@ spec:
       - name: dockerhub-pull-secret
       containers:
       - name: backend
-        # In production CI/CD, the GitOps sync job updates this tag automatically:
-        image: amreetpoudel/backend:latest
+        # In production CI/CD, the GitOps sync job updates this tag automatically with commit SHA:
+        image: amreetpoudel/backend:sha-0865334
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:

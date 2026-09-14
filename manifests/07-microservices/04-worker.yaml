@@ -19,8 +19,8 @@ spec:
       - name: dockerhub-pull-secret
       containers:
       - name: worker
-        # In production CI/CD, the GitOps sync job updates this tag automatically:
-        image: amreetpoudel/worker:latest
+        # In production CI/CD, the GitOps sync job updates this tag automatically with commit SHA:
+        image: amreetpoudel/worker:sha-0865334
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
