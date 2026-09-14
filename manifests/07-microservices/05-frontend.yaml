@@ -15,9 +15,11 @@ spec:
       labels:
         app: frontend-ui
     spec:
+      imagePullSecrets:
+      - name: dockerhub-pull-secret
       containers:
       - name: frontend
-        image: ghcr.io/amreetpoudel/frontend:latest
+        image: amreetpoudel/frontend:latest
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

@@ -15,10 +15,12 @@ spec:
       labels:
         app: worker
     spec:
+      imagePullSecrets:
+      - name: dockerhub-pull-secret
       containers:
       - name: worker
         # In production CI/CD, the GitOps sync job updates this tag automatically:
-        image: ghcr.io/amreetpoudel/worker:latest
+        image: amreetpoudel/worker:latest
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:

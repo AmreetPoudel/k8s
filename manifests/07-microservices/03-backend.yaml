@@ -29,10 +29,12 @@ spec:
       labels:
         app: backend-api
     spec:
+      imagePullSecrets:
+      - name: dockerhub-pull-secret
       containers:
       - name: backend
         # In production CI/CD, the GitOps sync job updates this tag automatically:
-        image: ghcr.io/amreetpoudel/backend:latest
+        image: amreetpoudel/backend:latest
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:

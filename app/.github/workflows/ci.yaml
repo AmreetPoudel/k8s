@@ -35,8 +35,8 @@ on:
         default: true
 
 env:
-  REGISTRY: ghcr.io
-  REPO_OWNER: ${{ github.repository_owner }}
+  REGISTRY: docker.io
+  DOCKERHUB_USERNAME: amreetpoudel
 
 jobs:
   # ============================================================================
@@ -85,18 +85,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry (GHCR)
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME || env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract Docker Metadata & Tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ matrix.service }}
+          images: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
@@ -118,7 +117,7 @@ jobs:
       - name: Scan Image for Vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ matrix.service }}:sha-${{ github.sha }}
+          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:sha-${{ github.sha }}
           format: 'table'
           exit-code: '0' # Set to 1 in strict prod to block deployment on criticals
           ignore-unfixed: true
@@ -127,12 +126,6 @@ jobs:
 
   # ============================================================================
   # JOB 3: Cross-Repository GitOps Image Tag Updater
-  # ============================================================================
-  # How the actual image value is updated in the separate infrastructure repo:
-  # 1. CI checks out the Manifests/GitOps repo using a Deploy Key or PAT
-  # 2. Uses yq/sed to update the deployment image tag to sha-<commit>
-  # 3. Commits and pushes back to GitOps repo
-  # 4. ArgoCD detects the commit and deploys to the bare-metal RKE2 cluster!
   # ============================================================================
   gitops-sync:
     name: Sync Image Tags to GitOps Manifests Repo
@@ -150,16 +143,16 @@ jobs:
       - name: Update Deployment Image Tags
         run: |
           NEW_TAG="sha-${{ github.sha }}"
-          echo "Updating GitOps manifests to image tag: $NEW_TAG"
+          echo "Updating GitOps manifests to image tag: $NEW_TAG for Docker Hub user: ${{ env.DOCKERHUB_USERNAME }}"
 
           # Update backend deployment image tag
-          sed -i "s|image: ghcr.io/${{ env.REPO_OWNER }}/backend:.*|image: ghcr.io/${{ env.REPO_OWNER }}/backend:${NEW_TAG}|g" manifests/07-microservices/03-backend.yaml
+          sed -i "s|image: .*/backend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/backend:${NEW_TAG}|g" manifests/07-microservices/03-backend.yaml
 
           # Update worker deployment image tag
-          sed -i "s|image: ghcr.io/${{ env.REPO_OWNER }}/worker:.*|image: ghcr.io/${{ env.REPO_OWNER }}/worker:${NEW_TAG}|g" manifests/07-microservices/04-worker.yaml
+          sed -i "s|image: .*/worker:.*|image: ${{ env.DOCKERHUB_USERNAME }}/worker:${NEW_TAG}|g" manifests/07-microservices/04-worker.yaml
 
           # Update frontend deployment image tag
-          sed -i "s|image: ghcr.io/${{ env.REPO_OWNER }}/frontend:.*|image: ghcr.io/${{ env.REPO_OWNER }}/frontend:${NEW_TAG}|g" manifests/07-microservices/05-frontend.yaml
+          sed -i "s|image: .*/frontend:.*|image: ${{ env.DOCKERHUB_USERNAME }}/frontend:${NEW_TAG}|g" manifests/07-microservices/05-frontend.yaml
 
       - name: Commit and Push Image Tag Updates to GitOps
         run: |
