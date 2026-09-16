@@ -23,7 +23,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  DOCKERHUB_USERNAME: amreetpoudel
+  DOCKERHUB_USERNAME: aamreet
 
 jobs:
   # ============================================================================
