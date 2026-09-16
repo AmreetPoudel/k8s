@@ -1,0 +1,17 @@
+amritpoudel@Amrits-MacBook-Air ~ % aws ssm get-parameters \
+  --names \
+    "/production/microservices/db_password" \
+    "/order-platform/dockerhub-username" \
+    "/order-platform/dockerhub-token" \
+  --with-decryption \
+  --region ap-south-1 \
+  --query "Parameters[*].[Name, Value]" \
+  --output table
+
+
+aws ssm get-parameter \
+  --name "/production/microservices/db_password" \
+  --with-decryption \
+  --region ap-south-1 \
+  --query "Parameter.Value" \
+  --output text
