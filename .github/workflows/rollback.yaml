@@ -17,7 +17,7 @@ on:
         default: 'Production issue detected'
 
 env:
-  DOCKERHUB_USERNAME: amreetpoudel
+  DOCKERHUB_USERNAME: aamreet
 
 jobs:
   execute-rollback:

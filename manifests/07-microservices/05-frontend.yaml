@@ -21,7 +21,7 @@ spec:
       containers:
       - name: frontend
         # In production CI/CD, the GitOps sync job updates this tag automatically with SemVer:
-        image: amreetpoudel/frontend:v1.0.0
+        image: aamreet/frontend:v1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

@@ -21,7 +21,7 @@ spec:
       containers:
       - name: worker
         # In production CI/CD, the GitOps sync job updates this tag automatically with SemVer:
-        image: amreetpoudel/worker:v1.0.0
+        image: aamreet/worker:v1.0.0
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
