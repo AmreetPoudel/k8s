@@ -1,0 +1,16 @@
+# TEMPLATE ONLY: Do NOT commit real AWS keys to Git!
+# Apply this during cluster bootstrap:
+#   kubectl create secret generic aws-creds-aws-ssm-readonly \
+#     --namespace default \
+#     --from-literal=access-key-id="<AWS_ACCESS_KEY_ID>" \
+#     --from-literal=secret-access-key="<AWS_SECRET_ACCESS_KEY>" \
+#     --dry-run=client -o yaml | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-creds-aws-ssm-readonly
+  namespace: default
+type: Opaque
+stringData:
+  access-key-id: "REPLACE_WITH_IAM_ACCESS_KEY_ID"
+  secret-access-key: "REPLACE_WITH_IAM_SECRET_ACCESS_KEY"
