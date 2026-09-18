@@ -67,13 +67,13 @@ mkdir -p /etc/rancher/rke2
 cat > /etc/rancher/rke2/config.yaml << 'EOF'
 # Point to the VIP (now that keepalived is set up, use VIP)
 # Port 9345 = RKE2 supervisor endpoint
-server: https://10.0.1.100:9345
+server: https://10.0.2.60:9345
 
 # Same token as masters
 token: K10abc...::server:def456...    # ← paste your actual token
 
 # This node's private IP
-node-ip: 10.0.2.10
+node-ip: 10.0.2.53
 
 # Label this as a worker
 node-label:
@@ -87,9 +87,9 @@ EOF
 mkdir -p /etc/rancher/rke2
 
 cat > /etc/rancher/rke2/config.yaml << 'EOF'
-server: https://10.0.1.100:9345
+server: https://10.0.2.60:9345
 token: K10abc...::server:def456...
-node-ip: 10.0.2.11
+node-ip: 10.0.2.54
 node-label:
   - "role=worker"
   - "node-type=worker"
@@ -101,9 +101,9 @@ EOF
 mkdir -p /etc/rancher/rke2
 
 cat > /etc/rancher/rke2/config.yaml << 'EOF'
-server: https://10.0.1.100:9345
+server: https://10.0.2.60:9345
 token: K10abc...::server:def456...
-node-ip: 10.0.2.12
+node-ip: 10.0.2.55
 node-label:
   - "role=worker"
   - "node-type=worker"
@@ -123,7 +123,7 @@ systemctl start rke2-agent
 journalctl -u rke2-agent -f
 
 # You'll see:
-# Connecting to supervisor https://10.0.1.100:9345
+# Connecting to supervisor https://10.0.2.60:9345
 # Successfully authenticated
 # Running kubelet
 # Node worker-1 registered with API server
@@ -132,7 +132,7 @@ journalctl -u rke2-agent -f
 ### What the Agent Does on Startup
 
 ```
-1. Contacts 10.0.1.100:9345 (VIP → master that owns it)
+1. Contacts 10.0.2.60:9345 (VIP → master that owns it)
 2. Authenticates with the token
 3. Downloads: server CA certs, kubelet config, kubeconfig
 4. Starts containerd
@@ -148,12 +148,12 @@ journalctl -u rke2-agent -f
 # [M1]
 kubectl get nodes -o wide
 # NAME       STATUS   ROLES                       AGE   VERSION   INTERNAL-IP
-# master-1   Ready    control-plane,etcd,master   30m   v1.29.x   10.0.1.10
-# master-2   Ready    control-plane,etcd,master   25m   v1.29.x   10.0.1.11
-# master-3   Ready    control-plane,etcd,master   20m   v1.29.x   10.0.1.12
-# worker-1   Ready    <none>                      5m    v1.29.x   10.0.2.10
-# worker-2   Ready    <none>                      4m    v1.29.x   10.0.2.11
-# worker-3   Ready    <none>                      3m    v1.29.x   10.0.2.12
+# master-1   Ready    control-plane,etcd,master   30m   v1.29.x   10.0.2.50
+# master-2   Ready    control-plane,etcd,master   25m   v1.29.x   10.0.2.51
+# master-3   Ready    control-plane,etcd,master   20m   v1.29.x   10.0.2.52
+# worker-1   Ready    <none>                      5m    v1.29.x   10.0.2.53
+# worker-2   Ready    <none>                      4m    v1.29.x   10.0.2.54
+# worker-3   Ready    <none>                      3m    v1.29.x   10.0.2.55
 ```
 
 ---

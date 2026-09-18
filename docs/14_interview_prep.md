@@ -84,7 +84,7 @@ Here are 5 real-world production incident stories formatted using the **STAR** (
 - **Situation**: After a network switch firmware upgrade in our private data center, developers reported that 50% of `kubectl` requests failed with `Connection reset by peer` or SSL hostname validation errors.
 - **Task**: Identify why API traffic was load-balancing erratically between master nodes instead of hitting the active master VIP.
 - **Action**:
-  1. Running `ip addr show` across the control plane nodes, I discovered that **both Master 1 and Master 2 had bound the Virtual IP `10.0.1.100` to their `eth0` interfaces**.
+  1. Running `ip addr show` across the control plane nodes, I discovered that **both Master 1 and Master 2 had bound the Virtual IP `10.0.2.60` to their `eth0` interfaces**.
   2. A packet capture (`tcpdump -i eth0 vrrp`) revealed that the new network switch ACL had blocked IP Protocol 112 (VRRP multicast).
   3. Master 2 stopped receiving heartbeat advertisements from Master 1, concluded Master 1 was dead, and promoted itself to `MASTER`.
   4. The network switches' ARP tables were flapping between Master 1 and Master 2 MAC addresses on every packet, sending TLS handshakes to Master 1 and subsequent data packets to Master 2.

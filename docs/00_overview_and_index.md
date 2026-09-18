@@ -11,16 +11,16 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                         YOUR NETWORK (AWS or Nutanix)                    │
+│                         MANAGEMENT SUBNET (10.0.2.0/24)                  │
 │                                                                          │
-│   Public Subnet (Masters)              Private Subnet (Workers)          │
+│   Control Plane (Masters)              Compute Workers                   │
 │  ┌────────────────────────┐           ┌────────────────────────┐         │
-│  │  master-1  10.0.1.10   │           │  worker-1  10.0.2.10   │         │
-│  │  master-2  10.0.1.11   │           │  worker-2  10.0.2.11   │         │
-│  │  master-3  10.0.1.12   │           │  worker-3  10.0.2.12   │         │
+│  │  master-1  10.0.2.50   │           │  worker-1  10.0.2.53   │         │
+│  │  master-2  10.0.2.51   │           │  worker-2  10.0.2.54   │         │
+│  │  master-3  10.0.2.52   │           │  worker-3  10.0.2.55   │         │
 │  │                        │           │                        │         │
-│  │  VIP: 10.0.1.100       │           │  (Reached via masters  │         │
-│  │  (keepalived)          │           │   or NAT GW)           │         │
+│  │  VIP: 10.0.2.60        │           │  MetalLB VIP: 10.0.2.56│         │
+│  │  (keepalived)          │           │  (Ingress traffic)     │         │
 │  └────────────────────────┘           └────────────────────────┘         │
 │           ↑                                      ↑                       │
 │    Port 6443 (API)                       Workloads run here              │

@@ -123,9 +123,9 @@ When a TLS server presents its certificate, the client checks:
 
 This check uses the **Subject Alternative Names (SANs)** field of the certificate.
 
-If you connect to `https://10.0.1.10:6443` and the cert only lists `master-1` as a SAN, the connection fails with:
+If you connect to `https://10.0.2.50:6443` and the cert only lists `master-1` as a SAN, the connection fails with:
 ```
-x509: certificate is valid for master-1, not 10.0.1.10
+x509: certificate is valid for master-1, not 10.0.2.50
 ```
 
 ### What SANs Must the API Server Cert Have?
@@ -136,10 +136,10 @@ The API server cert needs EVERY way you might connect to it:
 SANs required for API server certificate:
   - 127.0.0.1          (localhost, for local kubectl)
   - ::1                (IPv6 localhost)
-  - 10.0.1.10          (master-1 private IP)
-  - 10.0.1.11          (master-2 private IP)
-  - 10.0.1.12          (master-3 private IP)
-  - 10.0.1.100         (keepalived VIP)
+  - 10.0.2.50          (master-1 private IP)
+  - 10.0.2.51          (master-2 private IP)
+  - 10.0.2.52          (master-3 private IP)
+  - 10.0.2.60          (keepalived VIP)
   - master-1           (hostname)
   - master-2
   - master-3
@@ -158,7 +158,7 @@ In RKE2 config, you set this with `tls-san`:
 ```yaml
 # /etc/rancher/rke2/config.yaml
 tls-san:
-  - 10.0.1.100          # keepalived VIP
+  - 10.0.2.60           # keepalived VIP
   - master-vip
   - <your-public-ip>    # if you want to kubectl from laptop
 ```

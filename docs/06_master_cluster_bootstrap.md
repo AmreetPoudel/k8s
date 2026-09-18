@@ -20,19 +20,19 @@ mkdir -p /etc/rancher/rke2
 cat > /etc/rancher/rke2/config.yaml << 'EOF'
 # The bind address for the RKE2 API and supervisor endpoint
 # Use the node's primary private IP
-bind-address: 10.0.1.10
+bind-address: 10.0.2.50
 
 # Advertise the PRIVATE IP to other cluster members
 # This is what etcd peers and kubelet will use to reach this node
-advertise-address: 10.0.1.10
+advertise-address: 10.0.2.50
 
 # Additional SANs for the API server TLS cert
 # Include every way kubectl or components might connect
 tls-san:
-  - 10.0.1.10       # master-1 IP
-  - 10.0.1.11       # master-2 IP
-  - 10.0.1.12       # master-3 IP
-  - 10.0.1.100      # keepalived VIP
+  - 10.0.2.50       # master-1 IP
+  - 10.0.2.51       # master-2 IP
+  - 10.0.2.52       # master-3 IP
+  - 10.0.2.60      # keepalived VIP
   - master-1
   - master-2
   - master-3
@@ -89,20 +89,20 @@ mkdir -p /etc/rancher/rke2
 cat > /etc/rancher/rke2/config.yaml << 'EOF'
 # Point to master-1 (or VIP) to join the cluster
 # Port 9345 is RKE2's supervisor/registration port (NOT the k8s API port)
-server: https://10.0.1.10:9345
+server: https://10.0.2.50:9345
 
 # Token — must match exactly what master-1 generated
 # We'll fill this in after master-1 is running
 token: REPLACE_WITH_TOKEN
 
-bind-address: 10.0.1.11
-advertise-address: 10.0.1.11
+bind-address: 10.0.2.51
+advertise-address: 10.0.2.51
 
 tls-san:
-  - 10.0.1.10
-  - 10.0.1.11
-  - 10.0.1.12
-  - 10.0.1.100
+  - 10.0.2.50
+  - 10.0.2.51
+  - 10.0.2.52
+  - 10.0.2.60
   - master-1
   - master-2
   - master-3
@@ -128,17 +128,17 @@ EOF
 mkdir -p /etc/rancher/rke2
 
 cat > /etc/rancher/rke2/config.yaml << 'EOF'
-server: https://10.0.1.10:9345
+server: https://10.0.2.50:9345
 token: REPLACE_WITH_TOKEN
 
-bind-address: 10.0.1.12
-advertise-address: 10.0.1.12
+bind-address: 10.0.2.52
+advertise-address: 10.0.2.52
 
 tls-san:
-  - 10.0.1.10
-  - 10.0.1.11
-  - 10.0.1.12
-  - 10.0.1.100
+  - 10.0.2.50
+  - 10.0.2.51
+  - 10.0.2.52
+  - 10.0.2.60
   - master-1
   - master-2
   - master-3
@@ -159,7 +159,7 @@ node-label:
 EOF
 ```
 
-🔍 **Why `server: https://10.0.1.10:9345` and not the VIP?**  
+🔍 **Why `server: https://10.0.2.50:9345` and not the VIP?**  
 At this point, keepalived isn't set up yet. master-1 IS the only server, so we point directly to it. Once keepalived is configured (section 6.5), workers will point to the VIP. We can also update masters to use the VIP later.
 
 ---
@@ -343,7 +343,7 @@ kubectl get nodes
 
 # etcd quorum check
 /var/lib/rancher/rke2/bin/etcdctl \
-  --endpoints=https://10.0.1.10:2379,https://10.0.1.11:2379,https://10.0.1.12:2379 \
+  --endpoints=https://10.0.2.50:2379,https://10.0.2.51:2379,https://10.0.2.52:2379 \
   --cacert=/var/lib/rancher/rke2/server/tls/etcd/server-ca.crt \
   --cert=/var/lib/rancher/rke2/server/tls/etcd/client.crt \
   --key=/var/lib/rancher/rke2/server/tls/etcd/client.key \
@@ -361,7 +361,7 @@ kubectl get nodes
 
 ## 6.5 Configure keepalived for the Virtual IP
 
-This section sets up the VIP `10.0.1.100` that floats between masters.
+This section sets up the VIP `10.0.2.60` that floats between masters.
 
 ### Install keepalived
 
@@ -408,10 +408,10 @@ vrrp_instance VI_1 {
 
     # Unicast instead of multicast — works on AWS and most cloud VPCs
     # (Cloud VPCs block multicast; unicast VRRP works everywhere)
-    unicast_src_ip 10.0.1.10    # this node's IP
+    unicast_src_ip 10.0.2.50    # this node's IP
     unicast_peer {
-        10.0.1.11                # master-2
-        10.0.1.12                # master-3
+        10.0.2.51                # master-2
+        10.0.2.52                # master-3
     }
 
     # Authentication (prevents rogue keepalived from taking VIP)
@@ -422,7 +422,7 @@ vrrp_instance VI_1 {
 
     # The Virtual IP itself
     virtual_ipaddress {
-        10.0.1.100/24 dev eth0   # ⚠️ Change eth0 to your interface
+        10.0.2.60/24 dev eth0   # ⚠️ Change eth0 to your interface
     }
 
     # Run the health check
@@ -459,10 +459,10 @@ vrrp_instance VI_1 {
     priority 100          # lower than master-1 (101), higher than master-3 (99)
     advert_int 1
 
-    unicast_src_ip 10.0.1.11
+    unicast_src_ip 10.0.2.51
     unicast_peer {
-        10.0.1.10
-        10.0.1.12
+        10.0.2.50
+        10.0.2.52
     }
 
     authentication {
@@ -471,7 +471,7 @@ vrrp_instance VI_1 {
     }
 
     virtual_ipaddress {
-        10.0.1.100/24 dev eth0
+        10.0.2.60/24 dev eth0
     }
 
     track_script {
@@ -507,10 +507,10 @@ vrrp_instance VI_1 {
     priority 99           # lowest priority
     advert_int 1
 
-    unicast_src_ip 10.0.1.12
+    unicast_src_ip 10.0.2.52
     unicast_peer {
-        10.0.1.10
-        10.0.1.11
+        10.0.2.50
+        10.0.2.51
     }
 
     authentication {
@@ -519,7 +519,7 @@ vrrp_instance VI_1 {
     }
 
     virtual_ipaddress {
-        10.0.1.100/24 dev eth0
+        10.0.2.60/24 dev eth0
     }
 
     track_script {
@@ -557,7 +557,7 @@ echo $?   # should be 0 if RKE2 is running
 - master-2 has priority 100 — it's now highest
 - master-2 sends VRRP advertisement with higher priority
 - master-1 sees a higher-priority VRRP ad and gives up MASTER role
-- master-2 assigns `10.0.1.100` to its eth0
+- master-2 assigns `10.0.2.60` to its eth0
 - VIP moves, all traffic shifts to master-2
 
 ### Start keepalived
@@ -572,11 +572,11 @@ systemctl status keepalived
 
 # Verify VIP is on master-1
 # [M1]:
-ip addr show eth0 | grep "10.0.1.100"
-# Should show: inet 10.0.1.100/24 scope global secondary eth0
+ip addr show eth0 | grep "10.0.2.60"
+# Should show: inet 10.0.2.60/24 scope global secondary eth0
 
 # [M2, M3]:
-ip addr show eth0 | grep "10.0.1.100"
+ip addr show eth0 | grep "10.0.2.60"
 # Should show nothing (they don't own the VIP)
 ```
 
@@ -584,18 +584,18 @@ ip addr show eth0 | grep "10.0.1.100"
 
 ```bash
 # [LOCAL] — from your laptop (or any node), ping the VIP
-ping 10.0.1.100   # should respond (master-1 owns it)
+ping 10.0.2.60   # should respond (master-1 owns it)
 
 # [M1] — stop RKE2 (simulates master-1 failure)
 systemctl stop rke2-server
 
 # Wait ~6 seconds (fall:2 * interval:3)
 # [LOCAL] — VIP should still respond (master-2 took over)
-ping 10.0.1.100
+ping 10.0.2.60
 
 # Check which master owns VIP now
 # [M2]:
-ip addr show eth0 | grep "10.0.1.100"
+ip addr show eth0 | grep "10.0.2.60"
 # Should now show the VIP on master-2
 
 # [M1] — restart RKE2 (master-1 comes back)
@@ -603,7 +603,7 @@ systemctl start rke2-server
 
 # Wait ~6 seconds (rise:2)
 # [M1] — VIP returns to master-1 (it has highest priority 101)
-ip addr show eth0 | grep "10.0.1.100"
+ip addr show eth0 | grep "10.0.2.60"
 ```
 
 💡 **Interview**: *"How does your HA Kubernetes control plane handle master node failure?"*  

@@ -26,13 +26,13 @@ Before anything, know your nodes. Fill this in for your actual setup:
 
 | Role | Hostname | Private IP | Public IP |
 |------|----------|------------|-----------|
-| master-1 | master-1 | 10.0.1.10 | x.x.x.x |
-| master-2 | master-2 | 10.0.1.11 | x.x.x.x |
-| master-3 | master-3 | 10.0.1.12 | x.x.x.x |
-| master-VIP | — | 10.0.1.100 | — |
-| worker-1 | worker-1 | 10.0.2.10 | — |
-| worker-2 | worker-2 | 10.0.2.11 | — |
-| worker-3 | worker-3 | 10.0.2.12 | — |
+| master-1 | master-1 | 10.0.2.50 | x.x.x.x |
+| master-2 | master-2 | 10.0.2.51 | x.x.x.x |
+| master-3 | master-3 | 10.0.2.52 | x.x.x.x |
+| master-VIP | — | 10.0.2.60 | — |
+| worker-1 | worker-1 | 10.0.2.53 | — |
+| worker-2 | worker-2 | 10.0.2.54 | — |
+| worker-3 | worker-3 | 10.0.2.55 | — |
 
 ⚠️ **Replace all IPs in this doc with your actual IPs.** The IPs above are placeholders.
 
@@ -102,13 +102,13 @@ Nodes need to resolve each other's names. In production you'd use DNS. For this 
 cat >> /etc/hosts << 'EOF'
 
 # RKE2 Cluster Nodes
-10.0.1.10   master-1
-10.0.1.11   master-2
-10.0.1.12   master-3
-10.0.1.100  master-vip   # keepalived VIP — masters will respond here
-10.0.2.10   worker-1
-10.0.2.11   worker-2
-10.0.2.12   worker-3
+10.0.2.50   master-1
+10.0.2.51   master-2
+10.0.2.52   master-3
+10.0.2.60  master-vip   # keepalived VIP — masters will respond here
+10.0.2.53   worker-1
+10.0.2.54   worker-2
+10.0.2.55   worker-3
 EOF
 ```
 
@@ -453,8 +453,8 @@ net.bridge.bridge-nf-call-iptables = 1
 System clock synchronized: yes
 
 === /etc/hosts ===
-10.0.1.10   master-1
-10.0.1.11   master-2
+10.0.2.50   master-1
+10.0.2.51   master-2
 ... (all entries)
 
 === DNS resolution ===

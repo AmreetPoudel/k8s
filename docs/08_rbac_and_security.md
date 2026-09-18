@@ -122,7 +122,7 @@ kubectl create rolebinding dev-alice-view \
 
 # Step 6: Build kubeconfig for dev-alice
 kubectl config set-cluster rke2-cluster \
-  --server=https://10.0.1.100:6443 \
+  --server=https://10.0.2.60:6443 \
   --certificate-authority=/var/lib/rancher/rke2/server/tls/server-ca.crt \
   --embed-certs=true \
   --kubeconfig=dev-alice.kubeconfig
@@ -374,7 +374,7 @@ curl -sk https://127.0.0.1:6443/api -o /dev/null -w "%{http_code}"
 
 # 3. Verify etcd only listens on localhost (not public)
 ss -tlnp | grep 2379
-# Should show: 127.0.0.1:2379 and 10.0.1.10:2379 (private IPs only)
+# Should show: 127.0.0.1:2379 and 10.0.2.50:2379 (private IPs only)
 
 # 4. Verify kubelet read-only port is closed
 ss -tlnp | grep 10255

@@ -5,7 +5,7 @@
 > **CNI**: Canal (Flannel VXLAN Overlay + Calico NetworkPolicy)  
 > **Storage**: Longhorn Distributed Block Storage (3-way replication)  
 > **Ingress & LB**: NGINX Ingress Controller + MetalLB (Layer 2)  
-> **HA VIP**: Keepalived Unicast VRRP (`10.0.1.100`)
+> **HA VIP**: Keepalived Unicast VRRP (`10.0.2.60`)
 
 ---
 
@@ -20,17 +20,17 @@
           ▼                                                                      ▼
   ┌───────────────────────────────┐                                    ┌───────────────────────────┐
   │   Keepalived Virtual IP (VIP) │                                    │  MetalLB L2 VIP Pool      │
-  │   10.0.1.100:6443 & :9345     │                                    │  10.0.1.200 - 10.0.1.220  │
+  │   10.0.2.60:6443 & :9345     │                                    │  10.0.2.56 - 10.0.2.59  │
   └───────────────┬───────────────┘                                    └─────────────┬─────────────┘
                   │                                                                  │
 ══════════════════╪══════════════════════════════════════════════════════════════════╪════════════════════
-                  │ CONTROL PLANE LAYER (Public / Admin Subnet: 10.0.1.0/24)         │
+                  │ CONTROL PLANE LAYER (Management Subnet: 10.0.2.0/24)         │
 ══════════════════╪══════════════════════════════════════════════════════════════════╪════════════════════
                   │                                                                  │
       ┌───────────┴───────────────────────┬───────────────────────────┐              │
       ▼                                   ▼                           ▼              │
 ┌───────────────────────────┐ ┌───────────────────────────┐ ┌───────────────────────────┐  │
-│  MASTER 1 (10.0.1.10)     │ │  MASTER 2 (10.0.1.11)     │ │  MASTER 3 (10.0.1.12)     │  │
+│  MASTER 1 (10.0.2.50)     │ │  MASTER 2 (10.0.2.51)     │ │  MASTER 3 (10.0.2.52)     │  │
 │                           │ │                           │ │                           │  │
 │  [Keepalived: Priority 101│ │  [Keepalived: Priority 100│ │  [Keepalived: Priority 99 ]│  │
 │   (Active VIP Owner)]     │ │   (Backup Standby)]       │ │   (Backup Standby)]       │  │
@@ -61,7 +61,7 @@
           ┌─────────────────────────────────────┼────────────────────────────────────┐       │
           ▼                                     ▼                                    ▼       ▼
 ┌───────────────────────────────┐ ┌───────────────────────────────┐ ┌───────────────────────────────┐
-│  WORKER 1 (10.0.2.10)         │ │  WORKER 2 (10.0.2.11)         │ │  WORKER 3 (10.0.2.12)         │
+│  WORKER 1 (10.0.2.53)         │ │  WORKER 2 (10.0.2.54)         │ │  WORKER 3 (10.0.2.55)         │
 │                               │ │                               │ │                               │
 │  kubelet (:10250)             │ │  kubelet (:10250)             │ │  kubelet (:10250)             │
 │  kube-proxy (iptables rules)  │ │  kube-proxy (iptables rules)  │ │  kube-proxy (iptables rules)  │
@@ -97,8 +97,8 @@
 | **Node Network (Underlay)** | `10.0.1.0/24` (Masters)<br>`10.0.2.0/24` (Workers) | Physical Switch / AWS VPC | Real network interfaces (`eth0`) on physical servers or VMs. |
 | **Pod Network (Overlay)** | `10.42.0.0/16` | Canal (Flannel IPAM) | Virtual private IPs assigned to pods. Each node gets an isolated `/24` slice (254 IPs). Encapsulated over VXLAN UDP 8472. |
 | **Service Network (Virtual)** | `10.43.0.0/16` | kube-proxy (iptables) | Virtual ClusterIP addresses. Do not exist on any physical NIC; evaluated in-kernel by netfilter DNAT. |
-| **Keepalived HA VIP** | `10.0.1.100` | Keepalived (VRRP) | Single floating management entrypoint for `kubectl` and Kubelet agent registration. |
-| **MetalLB External Pool** | `10.0.1.200 - 10.0.1.220` | MetalLB (Layer 2 ARP) | Public/LAN accessible IP addresses dynamically allocated to `type: LoadBalancer` Services. |
+| **Keepalived HA VIP** | `10.0.2.60` | Keepalived (VRRP) | Single floating management entrypoint for `kubectl` and Kubelet agent registration. |
+| **MetalLB External Pool** | `10.0.2.56 - 10.0.2.59` | MetalLB (Layer 2 ARP) | Public/LAN accessible IP addresses dynamically allocated to `type: LoadBalancer` Services. |
 
 ---
 
@@ -108,7 +108,7 @@
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │ MASTER NODE ARCHITECTURE (master-1, master-2, master-3)                                │
 │                                                                                        │
-│  [keepalived Daemon] ──► Holds floating VIP (10.0.1.100) via check-rke2.sh healthz    │
+│  [keepalived Daemon] ──► Holds floating VIP (10.0.2.60) via check-rke2.sh healthz    │
 │                                                                                        │
 │  [RKE2 Server Systemd Service]                                                         │
 │    │                                                                                   │
@@ -148,7 +148,7 @@
 ### Path A: `kubectl` Command Execution Flow
 ```
 Developer Laptop 
-  ──► HTTPS request to https://10.0.1.100:6443 (VIP)
+  ──► HTTPS request to https://10.0.2.60:6443 (VIP)
   ──► Keepalived routes to active Master 1
   ──► kube-apiserver authenticates client cert (CN=admin, O=system:masters)
   ──► Authorizes via RBAC ClusterRole
@@ -159,7 +159,7 @@ Developer Laptop
 ### Path B: Inbound Public Web Traffic Flow
 ```
 Internet User 
-  ──► Enters via Ingress IP (10.0.1.200 via MetalLB or Worker HostPort :80)
+  ──► Enters via Ingress IP (10.0.2.56 via MetalLB or Worker HostPort :80)
   ──► NGINX Ingress Controller processes Host header (app.example.local)
   ──► Evaluates Ingress Path rules & SSL/TLS certificate
   ──► Proxies packet to ClusterIP Service (10.43.x.x:80)
@@ -173,7 +173,7 @@ Pod A (10.42.1.5 on Worker 1)
   ──► Sends TCP payload to Pod B (10.42.2.8 on Worker 2)
   ──► Leaves container via eth0 -> enters host caliXXX veth interface
   ──► Host routing table directs packet to flannel.1 virtual device
-  ──► Flannel encapsulates packet: Inner IP (10.42.1.5->10.42.2.8) + Outer UDP (10.0.2.10:8472 -> 10.0.2.11:8472)
+  ──► Flannel encapsulates packet: Inner IP (10.42.1.5->10.42.2.8) + Outer UDP (10.0.2.53:8472 -> 10.0.2.54:8472)
   ──► Transits physical underlay network switch
   ──► Worker 2 flannel.1 decapsulates outer UDP header
   ──► Calico Felix checks NetworkPolicy firewall rules (ACCEPT)

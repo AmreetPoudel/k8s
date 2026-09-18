@@ -313,7 +313,7 @@ Via **Mutual TLS (mTLS)**. The scheduler presents an X.509 client certificate si
 
 ### Q4.2: The Subject Alternative Name (SAN) Error
 **🎯 Production Scenario / Interview Question**:  
-*"You set up a Keepalived VIP at `10.0.1.100`. When connecting with kubectl from your laptop, you get `x509: certificate is valid for 10.0.1.10, not 10.0.1.100`. How do you fix this?"*
+*"You set up a Keepalived VIP at `10.0.2.60`. When connecting with kubectl from your laptop, you get `x509: certificate is valid for 10.0.2.50, not 10.0.2.60`. How do you fix this?"*
 
 **⚡ 15-Second Direct Answer**:  
 The API server's TLS certificate does not have the VIP listed in its **Subject Alternative Names (SANs)** whitelist. The client TLS handshake rejects it to prevent MITM attacks. Add the VIP to `tls-san` in RKE2 config and restart the server.
@@ -321,7 +321,7 @@ The API server's TLS certificate does not have the VIP listed in its **Subject A
 **🛠️ Production Fix in `/etc/rancher/rke2/config.yaml`**:
 ```yaml
 tls-san:
-  - "10.0.1.100"               # Keepalived VIP
+  - "10.0.2.60"               # Keepalived VIP
   - "k8s.mycompany.com"         # DNS Load Balancer
 ```
 
@@ -405,7 +405,7 @@ A live copy risks **page tearing and corruption** because bbolt/etcd is constant
 **🛠️ Production Command**:
 ```bash
 /var/lib/rancher/rke2/bin/etcdctl \
-  --endpoints=https://10.0.1.10:2379,https://10.0.1.11:2379,https://10.0.1.12:2379 \
+  --endpoints=https://10.0.2.50:2379,https://10.0.2.51:2379,https://10.0.2.52:2379 \
   --cacert=/var/lib/rancher/rke2/server/tls/etcd/server-ca.crt \
   --cert=/var/lib/rancher/rke2/server/tls/etcd/client.crt \
   --key=/var/lib/rancher/rke2/server/tls/etcd/client.key \
@@ -439,13 +439,13 @@ Every networking actor in Kubernetes has **one dedicated, non-overlapping job**:
 
 ### Q6.2: Step-by-Step Cross-Node Packet Walk (Worker-1 to Worker-2)
 **🎯 Production Scenario / Interview Question**:  
-*"Trace a packet from Pod A (`10.42.1.5` on Worker-1: `10.0.2.10`) to Pod B (`10.42.2.8` on Worker-2: `10.0.2.11`). What does the physical router see, and how do routing tables, `flannel.1`, ARP, and FDB tables interact?"*
+*"Trace a packet from Pod A (`10.42.1.5` on Worker-1: `10.0.2.53`) to Pod B (`10.42.2.8` on Worker-2: `10.0.2.54`). What does the physical router see, and how do routing tables, `flannel.1`, ARP, and FDB tables interact?"*
 
 **⚡ 15-Second Direct Answer**:  
-The physical router **never sees Pod IPs**. Worker-1's routing table directs `10.42.2.0/24` to `flannel.1`, which checks `bridge fdb` to find Worker-2's physical IP (`10.0.2.11`), wraps the packet in a **UDP Port 8472 envelope**, and sends it over physical `eth0`. Worker-2's `flannel.1` strips the outer UDP headers and delivers the inner packet to Pod B's `veth` cable.
+The physical router **never sees Pod IPs**. Worker-1's routing table directs `10.42.2.0/24` to `flannel.1`, which checks `bridge fdb` to find Worker-2's physical IP (`10.0.2.54`), wraps the packet in a **UDP Port 8472 envelope**, and sends it over physical `eth0`. Worker-2's `flannel.1` strips the outer UDP headers and delivers the inner packet to Pod B's `veth` cable.
 
 ```
-+================ WORKER-1 (10.0.2.10) ================+
++================ WORKER-1 (10.0.2.53) ================+
 │ [ Pod A: 10.42.1.5 ]                                 │
 │        │ (vethA cable)                               │
 │        ▼                                             │
@@ -454,15 +454,15 @@ The physical router **never sees Pod IPs**. Worker-1's routing table directs `10
 │        ▼                                             │
 │ [ flannel.1 ] ──► Wraps in Outer UDP Envelope:       │
 │ ┌──────────────────────────────────────────────────┐ │
-│ │ OUTER: Src 10.0.2.10 -> Dst 10.0.2.11:8472 (UDP) │ │
+│ │ OUTER: Src 10.0.2.53 -> Dst 10.0.2.54:8472 (UDP) │ │
 │ │ INNER: Src 10.42.1.5  -> Dst 10.42.2.8:80 (TCP)   │ │
 │ └──────────────────────────────────────────────────┘ │
 │        │                                             │
 │        ▼ (Physical eth0)                             │
 +======================================================+
                          │
-                         ▼ (Physical Switch only sees: 10.0.2.10 -> 10.0.2.11:8472)
-+================ WORKER-2 (10.0.2.11) ================+
+                         ▼ (Physical Switch only sees: 10.0.2.53 -> 10.0.2.54:8472)
++================ WORKER-2 (10.0.2.54) ================+
 │        │ (Physical eth0 receives UDP 8472)           │
 │        ▼                                             │
 │ [ flannel.1 ] ──► Strips outer UDP headers!          │
@@ -504,14 +504,14 @@ VXLAN encapsulation adds a 50-byte header (Outer IP + UDP + VXLAN headers). On a
 
 ### Q7.1: How Keepalived Binds Floating VIPs to Physical Interfaces
 **🎯 Production Scenario / Interview Question**:  
-*"Does Keepalived create a virtual network interface for its VIP (`10.0.1.100`), and how does failover happen in under 1 second?"*
+*"Does Keepalived create a virtual network interface for its VIP (`10.0.2.60`), and how does failover happen in under 1 second?"*
 
 **⚡ 15-Second Direct Answer**:  
 Keepalived binds the VIP directly to the **real physical network interface (e.g. `eth0`) as a Secondary IP**. On failover, the new master adds the secondary IP to its NIC and broadcasts a **Gratuitous ARP (GARP)** packet to update the network switch's MAC address table immediately.
 
 **🔍 Deep-Dive Technical Mechanics**:
 * Linux interfaces natively support multiple IP addresses (`ip addr show eth0`).
-* When Master-1 fails its health script (`/usr/local/bin/check-rke2.sh`), its VRRP priority drops. Master-2 takes over, assigns `10.0.1.100` to its `eth0`, and sends GARP packets so all future frames for `10.0.1.100` go to Master-2's MAC address.
+* When Master-1 fails its health script (`/usr/local/bin/check-rke2.sh`), its VRRP priority drops. Master-2 takes over, assigns `10.0.2.60` to its `eth0`, and sends GARP packets so all future frames for `10.0.2.60` go to Master-2's MAC address.
 
 ---
 
@@ -713,12 +713,12 @@ Longhorn exposes distributed block storage devices to worker nodes over the Linu
 *"Why does a Kubernetes Service with `type: LoadBalancer` get stuck in `<pending>` on bare metal, and how does MetalLB solve this?"*
 
 **⚡ 15-Second Direct Answer**:  
-Bare-metal environments lack cloud provider controller APIs (like AWS NLB/ALB) to provision external load balancers. MetalLB manages a pool of real network IP addresses (e.g. `10.0.1.200 - 10.0.1.220`) and uses **Layer-2 ARP** to respond to network switches on behalf of the assigned LoadBalancer IP.
+Bare-metal environments lack cloud provider controller APIs (like AWS NLB/ALB) to provision external load balancers. MetalLB manages a pool of real network IP addresses (e.g. `10.0.2.56 - 10.0.2.59`) and uses **Layer-2 ARP** to respond to network switches on behalf of the assigned LoadBalancer IP.
 
 **🔍 Deep-Dive Technical Mechanics**:
 * In AWS, the cloud-controller-manager provisions an external ELB when `type: LoadBalancer` is detected.
 * On bare-metal, MetalLB runs a `controller` pod (allocates IPs from `IPAddressPool`) and a `speaker` DaemonSet on every node.
-* In Layer-2 mode, when a service is assigned `10.0.1.200`, the `speaker` pod on one worker node answers ARP requests for that IP, attracting all incoming Layer-2 frames to its network card.
+* In Layer-2 mode, when a service is assigned `10.0.2.56`, the `speaker` pod on one worker node answers ARP requests for that IP, attracting all incoming Layer-2 frames to its network card.
 
 **⚠️ Senior SRE Production Gotcha**:  
 In MetalLB Layer-2 mode, **all traffic for a single LoadBalancer IP flows through a single active worker node** (single-node failover, not multi-node ECMP load balancing). If that worker node dies, MetalLB sends a Gratuitous ARP (GARP) to shift the IP to another node in ~1-3 seconds. For true multi-node bandwidth distribution on bare metal, you must use **MetalLB BGP mode** paired with upstream ToR (Top-of-Rack) hardware switches.
@@ -1049,7 +1049,7 @@ By assigning **PriorityClasses** and configuring `resources.requests` (Guarantee
 * **Situation**: Following a switch firmware update, 50% of API requests failed with `Connection reset by peer` or SSL errors.
 * **Task**: Identify why API traffic was load-balancing erratically between master nodes instead of hitting the active master VIP.
 * **Action**:
-  1. Discovered that **both Master 1 and Master 2 had bound the Virtual IP `10.0.1.100` to their `eth0` interfaces**.
+  1. Discovered that **both Master 1 and Master 2 had bound the Virtual IP `10.0.2.60` to their `eth0` interfaces**.
   2. `tcpdump -i eth0 vrrp` revealed the switch had blocked VRRP multicast (`224.0.0.18`).
   3. Master 2 stopped receiving heartbeats from Master 1, assumed Master 1 was dead, and promoted itself to `MASTER`.
   4. Reconfigured Keepalived to use **unicast VRRP** (`unicast_peer`) over private IPs and sent a gratuitous ARP (`arping -U`) from Master 1.

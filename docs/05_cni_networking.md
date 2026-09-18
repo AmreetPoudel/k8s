@@ -19,9 +19,9 @@ When Flannel starts on a node, it:
    ```bash
    # Flannel writes these automatically for every node in the cluster:
    ip neigh add 10.42.2.0 lladdr <mac-of-flannel.1-on-worker-2> dev flannel.1
-   bridge fdb add <mac-of-flannel.1-on-worker-2> dev flannel.1 dst 10.0.2.11
+   bridge fdb add <mac-of-flannel.1-on-worker-2> dev flannel.1 dst 10.0.2.54
    ```
-   This means: *"If any packet for `10.42.2.x` arrives at `flannel.1`, wrap it in a UDP envelope and send the outer packet to `10.0.2.11:8472`."*
+   This means: *"If any packet for `10.42.2.x` arrives at `flannel.1`, wrap it in a UDP envelope and send the outer packet to `10.0.2.54:8472`."*
 
 4. **When a new Pod is created:**
    * The kubelet calls the CNI binary `/opt/cni/bin/flannel`.
@@ -49,7 +49,7 @@ The idea is simple: **wrap a pod-level IP packet inside a regular UDP packet** t
 [VXLAN Outer UDP Packet — what the physical switch sees]
 ┌──────────────────────────────────────────────────────────────────────┐
 │ Outer Ethernet Header : Worker-1 MAC → Worker-2 MAC                  │
-│ Outer IP Header       : Src 10.0.2.10      → Dst 10.0.2.11           │
+│ Outer IP Header       : Src 10.0.2.53      → Dst 10.0.2.54           │
 │ Outer UDP Header      : Src port 12345 (random)  → Dst port 8472     │
 │ VXLAN Header          : VNI (Virtual Network Identifier) = 1         │
 ├──────────────────────────────────────────────────────────────────────┤
@@ -60,7 +60,7 @@ The idea is simple: **wrap a pod-level IP packet inside a regular UDP packet** t
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-The physical router sees **only the outer packet** (`10.0.2.10 → 10.0.2.11`). When it arrives at Worker-2, the Linux kernel sees UDP port 8472, hands it to the `flannel.1` VXLAN device, which strips the outer headers and delivers the inner pod packet to the right pod.
+The physical router sees **only the outer packet** (`10.0.2.53 → 10.0.2.54`). When it arrives at Worker-2, the Linux kernel sees UDP port 8472, hands it to the `flannel.1` VXLAN device, which strips the outer headers and delivers the inner pod packet to the right pod.
 
 ---
 
@@ -124,7 +124,7 @@ You are running an e-commerce platform with 3 tiers of microservices across your
 CUSTOMER BROWSER → NGINX Ingress (Port 443)
          │
          ▼
-+=============== WORKER-1 (10.0.2.10) ===============+
++=============== WORKER-1 (10.0.2.53) ===============+
 │                                                     │
 │  [STEP 1] Ingress routes to Frontend Pod            │
 │  frontend-pod-1 (10.42.1.5) processes the request   │
@@ -155,14 +155,14 @@ CUSTOMER BROWSER → NGINX Ingress (Port 443)
 │  [STEP 6] Kernel Route: 10.42.2.0/24 → flannel.1    │
 │  Flannel VXLAN Encapsulation:                       │
 │  ┌──────────────────────────────────────────────┐   │
-│  │ OUTER: 10.0.2.10 → 10.0.2.11  UDP:8472       │   │
+│  │ OUTER: 10.0.2.53 → 10.0.2.54  UDP:8472       │   │
 │  │ INNER: 10.42.1.5 → 10.42.2.10 TCP:3000       │   │
 │  └──────────────────────────────────────────────┘   │
 +=====================================================+
                           │
               (Physical network switch)
                           │
-+=============== WORKER-2 (10.0.2.11) ===============+
++=============== WORKER-2 (10.0.2.54) ===============+
 │                                                     │
 │  [STEP 7] flannel.1 Decapsulates                    │
 │  ┌────────────────────────────────────────────┐     │
@@ -184,7 +184,7 @@ CUSTOMER BROWSER → NGINX Ingress (Port 443)
                           │
               (Physical network switch)
                           │
-+=============== WORKER-3 (10.0.2.12) ===============+
++=============== WORKER-3 (10.0.2.55) ===============+
 │                                                     │
 │  [STEP 10] Calico Security Check (INGRESS to DB)    │
 │  Felix checks: Can 10.42.2.10 (order-service)       │
@@ -232,7 +232,7 @@ You need to understand these three non-overlapping IP spaces:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Network 1: NODE NETWORK (your real infrastructure)             │
-│  Range: 10.0.1.0/24 (masters), 10.0.2.0/24 (workers)          │
+│  Range: 10.0.2.0/24 (All Nodes)          │
 │  These IPs are on the actual NIC of each server.               │
 │  Packets here route normally through your switch/router.       │
 ├─────────────────────────────────────────────────────────────────┤
@@ -296,8 +296,8 @@ Canal = **Flannel** (overlay + IPAM) + **Calico** (NetworkPolicy enforcement)
 
 **VXLAN** = Virtual eXtensible LAN. When pod on node-1 sends to pod on node-2:
 ```
-Pod A (10.42.1.5) on worker-1 (10.0.2.10)
-  → sends to Pod B (10.42.2.8) on worker-2 (10.0.2.11)
+Pod A (10.42.1.5) on worker-1 (10.0.2.53)
+  → sends to Pod B (10.42.2.8) on worker-2 (10.0.2.54)
 
 Step 1: Pod A sends packet:
   src: 10.42.1.5, dst: 10.42.2.8
@@ -308,12 +308,12 @@ Step 2: Kernel checks routes on worker-1:
   Packet goes to flannel.1 interface
 
 Step 3: Flannel encapsulates:
-  Outer packet: src: 10.0.2.10 (worker-1's real IP), dst: 10.0.2.11 (worker-2's real IP)
+  Outer packet: src: 10.0.2.53 (worker-1's real IP), dst: 10.0.2.54 (worker-2's real IP)
   Inner packet: src: 10.42.1.5, dst: 10.42.2.8
   UDP port 8472 (VXLAN)
   VXLAN VNI (tunnel ID)
 
-Step 4: Outer packet routes normally (10.0.2.10 → 10.0.2.11)
+Step 4: Outer packet routes normally (10.0.2.53 → 10.0.2.54)
 
 Step 5: worker-2's flannel.1 receives UDP:8472
   Decapsulates: extracts inner packet (src: 10.42.1.5, dst: 10.42.2.8)

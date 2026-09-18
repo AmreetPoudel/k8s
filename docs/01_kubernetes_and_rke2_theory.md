@@ -75,7 +75,7 @@ Every master node runs all 4 control plane components, but they run in **two dif
 #### A. `kube-apiserver` — **Active-Active (Stateless)**
 * **All 3 API servers are active simultaneously.**
 * Because the API server holds **zero state in memory** (everything lives in etcd), a request from `kubectl` or a worker node can hit Master 1, Master 2, or Master 3. They all respond identically.
-* That's why our **Keepalived VIP (`10.0.1.100:6443`)** can route requests to whichever master is currently active with zero session affinity issues.
+* That's why our **Keepalived VIP (`10.0.2.60:6443`)** can route requests to whichever master is currently active with zero session affinity issues.
 
 #### B. `etcd` — **Active Distributed Consensus (Raft)**
 * All 3 etcd instances form **one single clustered database**.
@@ -288,22 +288,22 @@ Time 0: No API Server. No etcd. No cluster.
 
 ## 1.6 Keepalived, Floating VIP & VRRP Deep Dive
 
-To prevent hardcoding Master 1's IP (`10.0.1.10`) into your `kubeconfig` (which would be a single point of failure), we configure a **floating Virtual IP (VIP): `10.0.1.100`** managed by **Keepalived**.
+To prevent hardcoding Master 1's IP (`10.0.2.50`) into your `kubeconfig` (which would be a single point of failure), we configure a **floating Virtual IP (VIP): `10.0.2.60`** managed by **Keepalived**.
 
 ```
                         Laptop / Worker Nodes
                                  │
                                  ▼
-                     Requests to 10.0.1.100:6443
+                     Requests to 10.0.2.60:6443
                                  │
            ┌─────────────────────┼─────────────────────┐
            │ (Dead)              ▼                     │
 ┌───────────────────────┐   ┌───────────────────────┐  │┌───────────────────────┐
 │       MASTER 1        │   │       MASTER 2        │  ││       MASTER 3        │
-│   Real: 10.0.1.10     │   │   Real: 10.0.1.11     │  ││   Real: 10.0.1.12     │
+│   Real: 10.0.2.50     │   │   Real: 10.0.2.51     │  ││   Real: 10.0.2.52     │
 │      [CRASHED]        │   │   Priority: 100       │  ││   Priority: 99        │
 │                       │   │   [State: PROMOTED]   │  ││   [State: BACKUP]     │
-│                       │   │ *NOW OWNS 10.0.1.100* │  ││                       │
+│                       │   │ *NOW OWNS 10.0.2.60* │  ││                       │
 └───────────────────────┘   └───────────────────────┘  │└───────────────────────┘
 ```
 
@@ -311,19 +311,19 @@ To prevent hardcoding Master 1's IP (`10.0.1.10`) into your `kubeconfig` (which 
 Each master's `/etc/keepalived/keepalived.conf` explicitly lists the other master IPs:
 
 ```nginx
-# On Master 1 (10.0.1.10)
+# On Master 1 (10.0.2.50)
 vrrp_instance VI_1 {
     state MASTER
     interface eth0
     virtual_router_id 51
     priority 101
-    unicast_src_ip 10.0.1.10
+    unicast_src_ip 10.0.2.50
     unicast_peer {
-        10.0.1.11       # Master 2
-        10.0.1.12       # Master 3
+        10.0.2.51       # Master 2
+        10.0.2.52       # Master 3
     }
     virtual_ipaddress {
-        10.0.1.100/24 dev eth0
+        10.0.2.60/24 dev eth0
     }
 }
 ```
@@ -344,8 +344,8 @@ vrrp_instance VI_1 {
 ---
 
 ### 1.6.3 The Switch Hand-off: Gratuitous ARP (GARP)
-When Master 2 claims `10.0.1.100`, it broadcasts a **Gratuitous ARP** packet to the network switch:
-*"Hey switch! 10.0.1.100 is now at Master 2's MAC address!"*  
+When Master 2 claims `10.0.2.60`, it broadcasts a **Gratuitous ARP** packet to the network switch:
+*"Hey switch! 10.0.2.60 is now at Master 2's MAC address!"*  
 The switch updates its MAC table in **1 millisecond**, routing all traffic to Master 2 with zero manual intervention.
 
 ---

@@ -193,8 +193,8 @@ etcdctl_cmd endpoint health
 etcdctl_cmd member list
 # Output shows: id, status, name, peer URL, client URL, isLearner
 # Example:
-# abc123, started, master-1, https://10.0.1.10:2380, https://10.0.1.10:2379, false
-# def456, started, master-2, https://10.0.1.11:2380, https://10.0.1.11:2379, false
+# abc123, started, master-1, https://10.0.2.50:2380, https://10.0.2.50:2379, false
+# def456, started, master-2, https://10.0.2.51:2380, https://10.0.2.51:2379, false
 
 # Check cluster status (which is the leader)
 etcdctl_cmd endpoint status --cluster -w table
@@ -203,9 +203,9 @@ etcdctl_cmd endpoint status --cluster -w table
 # Check endpoint health across all members
 etcdctl_cmd endpoint health --cluster
 # Output:
-# https://10.0.1.10:2379 is healthy
-# https://10.0.1.11:2379 is healthy
-# https://10.0.1.12:2379 is healthy
+# https://10.0.2.50:2379 is healthy
+# https://10.0.2.51:2379 is healthy
+# https://10.0.2.52:2379 is healthy
 
 # List all Kubernetes keys (the actual data)
 etcdctl_cmd get /registry --prefix --keys-only | head -50
@@ -329,25 +329,25 @@ export PATH=$PATH:/var/lib/rancher/rke2/bin
 etcdctl snapshot restore /opt/etcd-backups/etcd-snapshot-YYYYMMDD-HHMMSS.db \
   --name master-1 \
   --data-dir /var/lib/rancher/rke2/server/db/etcd \
-  --initial-cluster "master-1=https://10.0.1.10:2380,master-2=https://10.0.1.11:2380,master-3=https://10.0.1.12:2380" \
+  --initial-cluster "master-1=https://10.0.2.50:2380,master-2=https://10.0.2.51:2380,master-3=https://10.0.2.52:2380" \
   --initial-cluster-token etcd-cluster-1 \
-  --initial-advertise-peer-urls https://10.0.1.10:2380
+  --initial-advertise-peer-urls https://10.0.2.50:2380
 
 # [M2] — restore the SAME snapshot on master-2
 etcdctl snapshot restore /opt/etcd-backups/etcd-snapshot-YYYYMMDD-HHMMSS.db \
   --name master-2 \
   --data-dir /var/lib/rancher/rke2/server/db/etcd \
-  --initial-cluster "master-1=https://10.0.1.10:2380,master-2=https://10.0.1.11:2380,master-3=https://10.0.1.12:2380" \
+  --initial-cluster "master-1=https://10.0.2.50:2380,master-2=https://10.0.2.51:2380,master-3=https://10.0.2.52:2380" \
   --initial-cluster-token etcd-cluster-1 \
-  --initial-advertise-peer-urls https://10.0.1.11:2380
+  --initial-advertise-peer-urls https://10.0.2.51:2380
 
 # [M3] — restore the SAME snapshot on master-3
 etcdctl snapshot restore /opt/etcd-backups/etcd-snapshot-YYYYMMDD-HHMMSS.db \
   --name master-3 \
   --data-dir /var/lib/rancher/rke2/server/db/etcd \
-  --initial-cluster "master-1=https://10.0.1.10:2380,master-2=https://10.0.1.11:2380,master-3=https://10.0.1.12:2380" \
+  --initial-cluster "master-1=https://10.0.2.50:2380,master-2=https://10.0.2.51:2380,master-3=https://10.0.2.52:2380" \
   --initial-cluster-token etcd-cluster-1 \
-  --initial-advertise-peer-urls https://10.0.1.12:2380
+  --initial-advertise-peer-urls https://10.0.2.52:2380
 
 # [ALL-M] — start RKE2 (master-1 first, then others)
 # On master-1:

@@ -209,21 +209,21 @@ ionice -c2 -n0 -p $(pgrep rke2)
 
 ---
 
-### Failure 6: Keepalived VIP Split-Brain (Two Masters Claiming 10.0.1.100)
+### Failure 6: Keepalived VIP Split-Brain (Two Masters Claiming 10.0.2.60)
 
 #### The Symptom:
 API connections from `kubectl` or worker kubelets constantly reset with `connection reset by peer` or SSL certificate validation mismatches.
 
 #### The Root Cause:
-If firewall rules block VRRP unicast traffic between Master 1 and Master 2, both nodes stop hearing each other's advertisements. Both promote themselves to `MASTER` state and bind `10.0.1.100` to their `eth0` interfaces. ARP tables on the network flap wildly between the two MAC addresses.
+If firewall rules block VRRP unicast traffic between Master 1 and Master 2, both nodes stop hearing each other's advertisements. Both promote themselves to `MASTER` state and bind `10.0.2.60` to their `eth0` interfaces. ARP tables on the network flap wildly between the two MAC addresses.
 
 #### The Diagnosis:
 ```bash
 # Check IP on Master 1:
-ip addr show eth0 | grep "10.0.1.100"
+ip addr show eth0 | grep "10.0.2.60"
 
 # Check IP on Master 2:
-ip addr show eth0 | grep "10.0.1.100"
+ip addr show eth0 | grep "10.0.2.60"
 # IF BOTH SHOW THE IP -> SPLIT BRAIN!
 
 # Check keepalived logs:
@@ -313,7 +313,7 @@ kubectl get prioritylevelconfigurations
 ### Failure 10: Inactive Ingress / MetalLB ARP Blackhole
 
 #### The Symptom:
-An external client cannot reach `http://10.0.1.200` (MetalLB IP). `arping` from a laptop receives no ARP replies.
+An external client cannot reach `http://10.0.2.56` (MetalLB IP). `arping` from a laptop receives no ARP replies.
 
 #### The Root Cause:
 In MetalLB Layer 2 mode, a single node's `speaker` pod is elected leader to reply to ARP queries for a given VIP. If that node's `speaker` container crashes or loses network connectivity without releasing leadership in memberlist, no node responds to ARP queries.
@@ -334,7 +334,7 @@ kubectl get l2advertisements -n metallb-system
 kubectl rollout restart ds/speaker -n metallb-system
 
 # Send gratuitous ARP from the active node manually if network switch cache is stale:
-arping -U -c 3 -I eth0 10.0.1.200
+arping -U -c 3 -I eth0 10.0.2.56
 ```
 
 ---

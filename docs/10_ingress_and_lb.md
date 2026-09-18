@@ -130,7 +130,7 @@ kubectl get ingress hello-ingress
 # Shows: ADDRESS column should show a worker node IP
 
 # Test (add hello.yourdomain.com to /etc/hosts pointing to worker IP)
-echo "10.0.2.10 hello.yourdomain.com" >> /etc/hosts
+echo "10.0.2.53 hello.yourdomain.com" >> /etc/hosts
 curl http://hello.yourdomain.com
 # Hello, world! Version: 1.0.0 ...
 ```
@@ -248,7 +248,7 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-  - 10.0.1.200-10.0.1.210   # range of unused IPs in master subnet
+  - 10.0.2.56-10.0.2.59   # range of unused IPs in master subnet
   # OR use worker subnet if workers are external-facing:
   # - 10.0.2.200-10.0.2.210
 ---
@@ -283,17 +283,17 @@ EOF
 
 # Watch for external IP assignment
 kubectl get svc hello-lb -w
-# EXTERNAL-IP changes from <pending> to 10.0.1.200 (MetalLB assigns it)
+# EXTERNAL-IP changes from <pending> to 10.0.2.56 (MetalLB assigns it)
 
 # Test (from any machine in the same network)
-curl http://10.0.1.200
+curl http://10.0.2.56
 # Hello, world!
 ```
 
 🔍 **How MetalLB Layer 2 works:**
-1. MetalLB assigns IP `10.0.1.200` from your pool to the Service
+1. MetalLB assigns IP `10.0.2.56` from your pool to the Service
 2. The `speaker` DaemonSet on one worker node (elected by MetalLB) "owns" this IP
-3. When anything on the network sends ARP "who has 10.0.1.200?", MetalLB speaker responds with the worker's MAC address
+3. When anything on the network sends ARP "who has 10.0.2.56?", MetalLB speaker responds with the worker's MAC address
 4. Traffic flows to that worker, then kube-proxy routes it to the actual pod
 5. If that worker node fails, MetalLB elects a new speaker and starts responding to ARP from a new node (gratuitous ARP)
 
