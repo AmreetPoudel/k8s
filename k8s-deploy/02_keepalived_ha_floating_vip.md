@@ -244,5 +244,5 @@ Once VIP failover is verified, proceed to **[03_bootstrap_master_1.md](file:///U
 
 ### Q3: How do backup nodes decide who becomes Master during a hard power crash?
 When Master-1 physically dies, heartbeat advertisements stop completely.
-* Master-2 and Master-3 run an election timer: $\text{Timer} = 3 \times \text{advert\_int} + \frac{256 - \text{Priority}}{256}$.
+* Master-2 and Master-3 run an election timer: `Timer = (3 × advert_int) + ((256 - Priority) / 256)` seconds.
 * Because **Master-2 has higher priority (100 vs 99)**, Master-2's timer finishes **faster**. Master-2 broadcasts a VRRP advertisement claiming the VIP first, and Master-3 yields and stays in Backup state.
