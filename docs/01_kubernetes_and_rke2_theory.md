@@ -314,7 +314,7 @@ Each master's `/etc/keepalived/keepalived.conf` explicitly lists the other maste
 # On Master 1 (10.0.2.50)
 vrrp_instance VI_1 {
     state MASTER
-    interface eth0
+    interface ens3
     virtual_router_id 51
     priority 101
     unicast_src_ip 10.0.2.50
@@ -323,7 +323,7 @@ vrrp_instance VI_1 {
         10.0.2.52       # Master 3
     }
     virtual_ipaddress {
-        10.0.2.60/24 dev eth0
+        10.0.2.60/24 dev ens3
     }
 }
 ```

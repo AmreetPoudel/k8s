@@ -18,13 +18,15 @@ This file does NOT exist by default. You create it.
 mkdir -p /etc/rancher/rke2
 
 cat > /etc/rancher/rke2/config.yaml << 'EOF'
-# The bind address for the RKE2 API and supervisor endpoint
-# Use the node's primary private IP
-bind-address: 10.0.2.50
+# Node's physical IP
+node-ip: 10.0.2.50
 
-# Advertise the PRIVATE IP to other cluster members
-# This is what etcd peers and kubelet will use to reach this node
+# Advertise the PRIVATE IP to other cluster members (etcd peers, kubelet)
 advertise-address: 10.0.2.50
+
+# ⚠️ CRITICAL TRAP: Do NOT set 'bind-address: 10.0.2.50' here!
+# Omitting bind-address lets RKE2 bind to 0.0.0.0, which allows it
+# to accept traffic on BOTH physical IP (10.0.2.50) and Floating VIP (10.0.2.60).
 
 # Additional SANs for the API server TLS cert
 # Include every way kubectl or components might connect
@@ -95,7 +97,8 @@ server: https://10.0.2.50:9345
 # We'll fill this in after master-1 is running
 token: REPLACE_WITH_TOKEN
 
-bind-address: 10.0.2.51
+# Node IP and advertise address
+node-ip: 10.0.2.51
 advertise-address: 10.0.2.51
 
 tls-san:
@@ -131,7 +134,7 @@ cat > /etc/rancher/rke2/config.yaml << 'EOF'
 server: https://10.0.2.50:9345
 token: REPLACE_WITH_TOKEN
 
-bind-address: 10.0.2.52
+node-ip: 10.0.2.52
 advertise-address: 10.0.2.52
 
 tls-san:
@@ -394,7 +397,7 @@ vrrp_script check_rke2 {
 # VRRP Instance — the actual VIP configuration
 vrrp_instance VI_1 {
     state MASTER      # this node starts as MASTER (highest priority)
-    interface eth0    # ⚠️ CHANGE THIS to your actual interface name
+    interface ens3    # ⚠️ CHANGE THIS to your actual interface name
                       # check with: ip link show | grep -E "^[0-9]"
                       # might be: ens3, ens5, enp0s3, eth0
 
@@ -422,7 +425,7 @@ vrrp_instance VI_1 {
 
     # The Virtual IP itself
     virtual_ipaddress {
-        10.0.2.60/24 dev eth0   # ⚠️ Change eth0 to your interface
+        10.0.2.60/24 dev ens3   # ⚠️ Change eth0 to your interface
     }
 
     # Run the health check
@@ -454,7 +457,7 @@ vrrp_script check_rke2 {
 
 vrrp_instance VI_1 {
     state BACKUP          # starts as BACKUP
-    interface eth0        # ⚠️ change to your interface
+    interface ens3        # ⚠️ change to your interface
     virtual_router_id 51  # same as master-1
     priority 100          # lower than master-1 (101), higher than master-3 (99)
     advert_int 1
@@ -471,7 +474,7 @@ vrrp_instance VI_1 {
     }
 
     virtual_ipaddress {
-        10.0.2.60/24 dev eth0
+        10.0.2.60/24 dev ens3
     }
 
     track_script {
@@ -502,7 +505,7 @@ vrrp_script check_rke2 {
 
 vrrp_instance VI_1 {
     state BACKUP
-    interface eth0        # ⚠️ change to your interface
+    interface ens3        # ⚠️ change to your interface
     virtual_router_id 51
     priority 99           # lowest priority
     advert_int 1
@@ -519,7 +522,7 @@ vrrp_instance VI_1 {
     }
 
     virtual_ipaddress {
-        10.0.2.60/24 dev eth0
+        10.0.2.60/24 dev ens3
     }
 
     track_script {
@@ -557,7 +560,7 @@ echo $?   # should be 0 if RKE2 is running
 - master-2 has priority 100 — it's now highest
 - master-2 sends VRRP advertisement with higher priority
 - master-1 sees a higher-priority VRRP ad and gives up MASTER role
-- master-2 assigns `10.0.2.60` to its eth0
+- master-2 assigns `10.0.2.60` to its ens3
 - VIP moves, all traffic shifts to master-2
 
 ### Start keepalived
@@ -572,11 +575,11 @@ systemctl status keepalived
 
 # Verify VIP is on master-1
 # [M1]:
-ip addr show eth0 | grep "10.0.2.60"
-# Should show: inet 10.0.2.60/24 scope global secondary eth0
+ip addr show ens3 | grep "10.0.2.60"
+# Should show: inet 10.0.2.60/24 scope global secondary ens3
 
 # [M2, M3]:
-ip addr show eth0 | grep "10.0.2.60"
+ip addr show ens3 | grep "10.0.2.60"
 # Should show nothing (they don't own the VIP)
 ```
 
@@ -595,7 +598,7 @@ ping 10.0.2.60
 
 # Check which master owns VIP now
 # [M2]:
-ip addr show eth0 | grep "10.0.2.60"
+ip addr show ens3 | grep "10.0.2.60"
 # Should now show the VIP on master-2
 
 # [M1] — restart RKE2 (master-1 comes back)
@@ -603,7 +606,7 @@ systemctl start rke2-server
 
 # Wait ~6 seconds (rise:2)
 # [M1] — VIP returns to master-1 (it has highest priority 101)
-ip addr show eth0 | grep "10.0.2.60"
+ip addr show ens3 | grep "10.0.2.60"
 ```
 
 💡 **Interview**: *"How does your HA Kubernetes control plane handle master node failure?"*  

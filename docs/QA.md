@@ -510,7 +510,7 @@ VXLAN encapsulation adds a 50-byte header (Outer IP + UDP + VXLAN headers). On a
 Keepalived binds the VIP directly to the **real physical network interface (e.g. `eth0`) as a Secondary IP**. On failover, the new master adds the secondary IP to its NIC and broadcasts a **Gratuitous ARP (GARP)** packet to update the network switch's MAC address table immediately.
 
 **🔍 Deep-Dive Technical Mechanics**:
-* Linux interfaces natively support multiple IP addresses (`ip addr show eth0`).
+* Linux interfaces natively support multiple IP addresses (`ip addr show ens3`).
 * When Master-1 fails its health script (`/usr/local/bin/check-rke2.sh`), its VRRP priority drops. Master-2 takes over, assigns `10.0.2.60` to its `eth0`, and sends GARP packets so all future frames for `10.0.2.60` go to Master-2's MAC address.
 
 ---
@@ -1050,7 +1050,7 @@ By assigning **PriorityClasses** and configuring `resources.requests` (Guarantee
 * **Task**: Identify why API traffic was load-balancing erratically between master nodes instead of hitting the active master VIP.
 * **Action**:
   1. Discovered that **both Master 1 and Master 2 had bound the Virtual IP `10.0.2.60` to their `eth0` interfaces**.
-  2. `tcpdump -i eth0 vrrp` revealed the switch had blocked VRRP multicast (`224.0.0.18`).
+  2. `tcpdump -i ens3 vrrp` revealed the switch had blocked VRRP multicast (`224.0.0.18`).
   3. Master 2 stopped receiving heartbeats from Master 1, assumed Master 1 was dead, and promoted itself to `MASTER`.
   4. Reconfigured Keepalived to use **unicast VRRP** (`unicast_peer`) over private IPs and sent a gratuitous ARP (`arping -U`) from Master 1.
 * **Result**: Master 2 transitioned cleanly to `BACKUP`, duplicate IP was released, and API connectivity stabilized immediately.
@@ -1130,7 +1130,7 @@ MetalLB Layer 2 mode does **not** balance traffic across nodes at the link layer
 **🛠️ Production Verification Commands**:
 ```bash
 # Verify which worker node holds the MetalLB VIP from your laptop:
-arping -I eth0 10.0.2.56
+arping -I ens3 10.0.2.56
 # Check MetalLB speaker elected leader leases:
 kubectl get leases -n metallb-system
 ```

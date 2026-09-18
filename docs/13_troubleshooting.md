@@ -220,10 +220,10 @@ If firewall rules block VRRP unicast traffic between Master 1 and Master 2, both
 #### The Diagnosis:
 ```bash
 # Check IP on Master 1:
-ip addr show eth0 | grep "10.0.2.60"
+ip addr show ens3 | grep "10.0.2.60"
 
 # Check IP on Master 2:
-ip addr show eth0 | grep "10.0.2.60"
+ip addr show ens3 | grep "10.0.2.60"
 # IF BOTH SHOW THE IP -> SPLIT BRAIN!
 
 # Check keepalived logs:
@@ -236,7 +236,7 @@ journalctl -u keepalived -n 50
 2. Check firewall permissions for VRRP protocol (IP protocol 112) or UDP unicast communication.
 3. Test connectivity with `tcpdump`:
 ```bash
-tcpdump -i eth0 vrrp -n
+tcpdump -i ens3 vrrp -n
 ```
 
 ---
@@ -334,7 +334,7 @@ kubectl get l2advertisements -n metallb-system
 kubectl rollout restart ds/speaker -n metallb-system
 
 # Send gratuitous ARP from the active node manually if network switch cache is stale:
-arping -U -c 3 -I eth0 10.0.2.56
+arping -U -c 3 -I ens3 10.0.2.56
 ```
 
 ---
