@@ -6,9 +6,17 @@
 
 ---
 
-## Step 1: Deploy MetalLB Native Manifests
+## Step 1: Deploy MetalLB (Declarative GitOps or Manual)
 
-### 🎯 The Command:
+### Option A: Declarative GitOps (Recommended via ArgoCD)
+MetalLB is managed declaratively via [`manifests/02-metallb/00-metallb-app.yaml`](file:///Users/amritpoudel/k8s-rke2/manifests/02-metallb/00-metallb-app.yaml):
+```bash
+# ArgoCD root app automatically syncs this, or apply manually:
+kubectl apply -f manifests/02-metallb/00-metallb-app.yaml
+```
+
+### Option B: Bootstrap Manual Apply
+If bootstrapping without ArgoCD:
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
 ```
@@ -17,7 +25,7 @@ kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/confi
 
 ## Step 2: Apply Declarative IP Pool & Layer-2 Advertisement
 
-### 🎯 The Commands:
+Once MetalLB CRDs exist (or handled via ArgoCD Sync Wave 2):
 ```bash
 kubectl apply -f manifests/02-metallb/01-ipaddresspool.yaml
 kubectl apply -f manifests/02-metallb/02-l2advertisement.yaml
